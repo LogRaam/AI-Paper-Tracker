@@ -1,4 +1,4 @@
 arxiv
 PySide6
-paperswithcode-client
+huggingface-hub
 tea-client==0.0.8

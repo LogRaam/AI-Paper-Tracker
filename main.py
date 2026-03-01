@@ -37,14 +37,14 @@ class FetchWorker(QThread):
             papers_arxiv = fetch_all_recent_papers(self.days_back, progress_callback=progress_callback, start_date=self.start_date)
             all_papers.extend(papers_arxiv)
             
-            self.progress.emit(50, "Fetching from Papers with Code...")
-            print("Fetching from Papers with Code...", flush=True)
+            self.progress.emit(50, "Fetching from Hugging Face...")
+            print("Fetching from Hugging Face...", flush=True)
             try:
-                from paperswithcode_fetcher import fetch_all_papers_with_code
-                papers_pwc = fetch_all_papers_with_code(progress_callback=progress_callback, start_date=self.start_date)
-                all_papers.extend(papers_pwc)
-            except Exception as pwc_err:
-                print(f"WARNING: Papers with Code unavailable: {pwc_err}", flush=True)
+                from huggingface_fetcher import fetch_all_papers_huggingface
+                papers_hf = fetch_all_papers_huggingface(progress_callback=progress_callback, start_date=self.start_date)
+                all_papers.extend(papers_hf)
+            except Exception as hf_err:
+                print(f"WARNING: Hugging Face unavailable: {hf_err}", flush=True)
             
             db = Database()
             existing_count = db.get_paper_count()
@@ -114,7 +114,7 @@ class MainWindow(QMainWindow):
         self.source_combo = QComboBox()
         self.source_combo.addItem("All Sources", None)
         self.source_combo.addItem("arXiv", "arXiv")
-        self.source_combo.addItem("Papers with Code", "Papers with Code")
+        self.source_combo.addItem("Hugging Face", "Hugging Face")
         self.source_combo.currentIndexChanged.connect(self.on_search)
         toolbar.addWidget(QLabel("Source:"))
         toolbar.addWidget(self.source_combo)
