@@ -21,7 +21,7 @@ def fetch_papers_with_code(progress_callback: Callable = None, start_date: str =
     
     while True:
         if progress_callback:
-            progress_callback(int((page % 10) * 10), f"Page {page}")
+            progress_callback(int((page % 10) * 10), f"Fetching Papers with Code (page {page})")
         
         try:
             result = client.paper_list(page=page, items_per_page=50)

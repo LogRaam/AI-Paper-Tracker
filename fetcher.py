@@ -59,7 +59,7 @@ def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback:
         print(msg, flush=True)
         
         if progress_callback:
-            progress_callback(progress_pct, cat_name)
+            progress_callback(progress_pct, msg)
         
         search = arxiv.Search(
             query=f"cat:{cat_code}",

@@ -33,10 +33,12 @@ class FetchWorker(QThread):
             all_papers = []
             
             self.progress.emit(0, "Fetching from arXiv...")
+            print("Fetching from arXiv...", flush=True)
             papers_arxiv = fetch_all_recent_papers(self.days_back, progress_callback=progress_callback, start_date=self.start_date)
             all_papers.extend(papers_arxiv)
             
             self.progress.emit(50, "Fetching from Papers with Code...")
+            print("Fetching from Papers with Code...", flush=True)
             try:
                 from paperswithcode_fetcher import fetch_all_papers_with_code
                 papers_pwc = fetch_all_papers_with_code(progress_callback=progress_callback, start_date=self.start_date)
@@ -222,7 +224,6 @@ class MainWindow(QMainWindow):
 
     def on_fetch_progress(self, pct: int, message: str):
         self.progress_bar.setValue(pct)
-        print(message, flush=True)
         self.status_bar.showMessage(message)
 
     def on_fetch_finished(self, new_count: int):
