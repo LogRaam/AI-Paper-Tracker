@@ -2,13 +2,19 @@ from paperswithcode import PapersWithCodeClient
 from datetime import datetime, timedelta
 from typing import List, Callable
 import time
+import logging
 
 from models import Paper
 
 
 def fetch_papers_with_code(progress_callback: Callable = None, start_date: str = None) -> List[Paper]:
     papers = []
-    client = PapersWithCodeClient()
+    
+    try:
+        client = PapersWithCodeClient()
+    except Exception as e:
+        print(f"ERROR: Could not initialize PapersWithCode client: {e}", flush=True)
+        return papers
     
     page = 1
     total_fetched = 0
