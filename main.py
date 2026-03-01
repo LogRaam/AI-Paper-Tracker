@@ -45,6 +45,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.db = Database()
         self.fetch_worker = None
+        self.papers = []
         
         self.init_ui()
         self.load_papers()
