@@ -1,0 +1,3 @@
+arxiv
+PySide6
+APScheduler
