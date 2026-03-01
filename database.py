@@ -159,6 +159,14 @@ class Database:
         conn.close()
         return row[0] if row else None
 
+    def get_most_recent_date(self) -> Optional[str]:
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT MAX(published) FROM papers')
+        row = cursor.fetchone()
+        conn.close()
+        return row[0] if row and row[0] else None
+
     def _row_to_paper(self, row) -> 'Paper':
         from models import Paper
         return Paper(

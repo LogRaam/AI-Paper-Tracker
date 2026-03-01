@@ -17,9 +17,10 @@ class FetchWorker(QThread):
     finished = Signal(int)
     error = Signal(str)
 
-    def __init__(self, days_back: int = 7):
+    def __init__(self, days_back: int = 7, start_date: str = None):
         super().__init__()
         self.days_back = days_back
+        self.start_date = start_date
 
     def run(self):
         try:
@@ -28,7 +29,7 @@ class FetchWorker(QThread):
             def progress_callback(pct, message):
                 self.progress.emit(pct, message)
             
-            papers = fetch_all_recent_papers(self.days_back, progress_callback=progress_callback)
+            papers = fetch_all_recent_papers(self.days_back, progress_callback=progress_callback, start_date=self.start_date)
             
             db = Database()
             existing_count = db.get_paper_count()
@@ -198,7 +199,9 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.status_bar.showMessage("Fetching papers from arXiv...")
         
-        self.fetch_worker = FetchWorker(days_back=7)
+        most_recent = self.db.get_most_recent_date()
+        
+        self.fetch_worker = FetchWorker(days_back=7, start_date=most_recent)
         self.fetch_worker.progress.connect(self.on_fetch_progress)
         self.fetch_worker.finished.connect(self.on_fetch_finished)
         self.fetch_worker.error.connect(self.on_fetch_error)

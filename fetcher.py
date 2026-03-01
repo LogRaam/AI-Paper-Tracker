@@ -41,9 +41,12 @@ def get_category_display(categories_str: str) -> str:
     return ', '.join(display)
 
 
-def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback: Callable = None) -> List[Paper]:
+def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback: Callable = None, start_date: str = None) -> List[Paper]:
     papers = []
-    cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
+    if start_date:
+        cutoff_date = datetime.strptime(start_date, '%Y-%m-%d')
+    else:
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
     
     client = arxiv.Client()
     total_cats = len(CATEGORY_CODES)
@@ -74,8 +77,13 @@ def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback:
                     if published_dt.tzinfo is not None:
                         published_dt = published_dt.replace(tzinfo=None)
                     
-                    if published_dt < cutoff_date.replace(tzinfo=None):
-                        continue
+                    if start_date:
+                        paper_date = datetime.strptime(start_date, '%Y-%m-%d')
+                        if published_dt <= paper_date:
+                            continue
+                    else:
+                        if published_dt < cutoff_date.replace(tzinfo=None):
+                            continue
                     
                     arxiv_id = result.entry_id.split('/')[-1]
                     
@@ -120,8 +128,11 @@ def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback:
     return papers
 
 
-def fetch_all_recent_papers(days_back: int = 7, progress_callback: Callable = None) -> List[Paper]:
-    print(f"Starting fetch for last {days_back} days...", flush=True)
+def fetch_all_recent_papers(days_back: int = 7, progress_callback: Callable = None, start_date: str = None) -> List[Paper]:
+    if start_date:
+        print(f"Starting fetch from {start_date} to today...", flush=True)
+    else:
+        print(f"Starting fetch for last {days_back} days...", flush=True)
     
-    papers = fetch_papers(days_back=days_back, progress_callback=progress_callback)
+    papers = fetch_papers(days_back=days_back, progress_callback=progress_callback, start_date=start_date)
     return papers
