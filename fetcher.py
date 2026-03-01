@@ -1,6 +1,7 @@
 import arxiv
 from datetime import datetime, timedelta, timezone
-from typing import List
+from typing import List, Callable
+import sys
 import re
 
 from models import Paper, CATEGORIES, CATEGORY_CODES
@@ -39,7 +40,7 @@ def get_category_display(categories_str: str) -> str:
     return ', '.join(display)
 
 
-def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback=None) -> List[Paper]:
+def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback: Callable = None) -> List[Paper]:
     papers = []
     cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
     
@@ -50,10 +51,11 @@ def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback=
         cat_name = CATEGORIES.get(cat_code, cat_code)
         progress_pct = int((idx / total_cats) * 100)
         
+        msg = f"[{progress_pct}%] Fetching: {cat_name}"
+        print(msg, flush=True)
+        
         if progress_callback:
             progress_callback(progress_pct, cat_name)
-        else:
-            print(f"[{progress_pct}%] Fetching category: {cat_code} ({cat_name})")
         
         search = arxiv.Search(
             query=f"cat:{cat_code}",
@@ -104,8 +106,10 @@ def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback=
                     continue
                     
         except Exception as e:
-            print(f"Error fetching category {cat_code}: {e}")
+            print(f"Error fetching category {cat_code}: {e}", flush=True)
             continue
+    
+    print(f"[100%] Complete! Found {len(papers)} papers", flush=True)
     
     if progress_callback:
         progress_callback(100, "Complete")
@@ -113,9 +117,8 @@ def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback=
     return papers
 
 
-def fetch_all_recent_papers(days_back: int = 7, progress_callback=None) -> List[Paper]:
-    if progress_callback:
-        progress_callback(0, "Starting...")
+def fetch_all_recent_papers(days_back: int = 7, progress_callback: Callable = None) -> List[Paper]:
+    print(f"Starting fetch for last {days_back} days...", flush=True)
     
     papers = fetch_papers(days_back=days_back, progress_callback=progress_callback)
     return papers
