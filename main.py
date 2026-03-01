@@ -26,7 +26,6 @@ class FetchWorker(QThread):
     def run(self):
         try:
             from fetcher import fetch_all_recent_papers
-            from paperswithcode_fetcher import fetch_all_papers_with_code
             
             def progress_callback(pct, message):
                 self.progress.emit(pct, message)
@@ -38,8 +37,12 @@ class FetchWorker(QThread):
             all_papers.extend(papers_arxiv)
             
             self.progress.emit(50, "Fetching from Papers with Code...")
-            papers_pwc = fetch_all_papers_with_code(progress_callback=progress_callback, start_date=self.start_date)
-            all_papers.extend(papers_pwc)
+            try:
+                from paperswithcode_fetcher import fetch_all_papers_with_code
+                papers_pwc = fetch_all_papers_with_code(progress_callback=progress_callback, start_date=self.start_date)
+                all_papers.extend(papers_pwc)
+            except Exception as pwc_err:
+                print(f"WARNING: Papers with Code unavailable: {pwc_err}", flush=True)
             
             db = Database()
             existing_count = db.get_paper_count()
