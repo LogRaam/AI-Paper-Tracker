@@ -13,7 +13,7 @@ from models import Database, Paper, CATEGORIES, CATEGORY_CODES
 
 
 class FetchWorker(QThread):
-    progress = Signal(str)
+    progress = Signal(int, str)
     finished = Signal(int)
     error = Signal(str)
 
@@ -24,9 +24,11 @@ class FetchWorker(QThread):
     def run(self):
         try:
             from fetcher import fetch_all_recent_papers
-            self.progress.emit("Fetching papers from arXiv...")
-            papers = fetch_all_recent_papers(self.days_back)
-            self.progress.emit(f"Saving {len(papers)} papers to database...")
+            
+            def progress_callback(pct, message):
+                self.progress.emit(pct, message)
+            
+            papers = fetch_all_recent_papers(self.days_back, progress_callback=progress_callback)
             
             db = Database()
             existing_count = db.get_paper_count()
@@ -97,6 +99,12 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.meta_checkbox)
         
         toolbar.addStretch()
+        
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMaximumWidth(150)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(False)
+        toolbar.addWidget(self.progress_bar)
         
         self.refresh_btn = QPushButton("🔄 Refresh")
         self.refresh_btn.clicked.connect(self.start_fetch)
@@ -185,6 +193,8 @@ class MainWindow(QMainWindow):
     def start_fetch(self):
         self.refresh_btn.setEnabled(False)
         self.refresh_btn.setText("Fetching...")
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
         self.status_bar.showMessage("Fetching papers from arXiv...")
         
         self.fetch_worker = FetchWorker(days_back=7)
@@ -193,12 +203,14 @@ class MainWindow(QMainWindow):
         self.fetch_worker.error.connect(self.on_fetch_error)
         self.fetch_worker.start()
 
-    def on_fetch_progress(self, message: str):
-        self.status_bar.showMessage(message)
+    def on_fetch_progress(self, pct: int, message: str):
+        self.progress_bar.setValue(pct)
+        self.status_bar.showMessage(f"[{pct}%] {message}")
 
     def on_fetch_finished(self, new_count: int):
         self.refresh_btn.setEnabled(True)
         self.refresh_btn.setText("🔄 Refresh")
+        self.progress_bar.setVisible(False)
         
         self.load_papers()
         self.update_status()
@@ -208,6 +220,7 @@ class MainWindow(QMainWindow):
     def on_fetch_error(self, error: str):
         self.refresh_btn.setEnabled(True)
         self.refresh_btn.setText("🔄 Refresh")
+        self.progress_bar.setVisible(False)
         self.status_bar.showMessage(f"Error: {error}")
 
     def toggle_auto_refresh(self, state: int):

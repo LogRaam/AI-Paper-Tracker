@@ -39,14 +39,21 @@ def get_category_display(categories_str: str) -> str:
     return ', '.join(display)
 
 
-def fetch_papers(days_back: int = 7, max_results: int = 3000) -> List[Paper]:
+def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback=None) -> List[Paper]:
     papers = []
     cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
     
     client = arxiv.Client()
+    total_cats = len(CATEGORY_CODES)
     
-    for cat_code in CATEGORY_CODES:
-        print(f"Fetching category: {cat_code} ({CATEGORIES.get(cat_code, cat_code)})")
+    for idx, cat_code in enumerate(CATEGORY_CODES):
+        cat_name = CATEGORIES.get(cat_code, cat_code)
+        progress_pct = int((idx / total_cats) * 100)
+        
+        if progress_callback:
+            progress_callback(progress_pct, cat_name)
+        else:
+            print(f"[{progress_pct}%] Fetching category: {cat_code} ({cat_name})")
         
         search = arxiv.Search(
             query=f"cat:{cat_code}",
@@ -94,18 +101,21 @@ def fetch_papers(days_back: int = 7, max_results: int = 3000) -> List[Paper]:
                     papers.append(paper)
                     
                 except Exception as e:
-                    print(f"Error processing paper: {e}")
                     continue
                     
         except Exception as e:
             print(f"Error fetching category {cat_code}: {e}")
             continue
     
+    if progress_callback:
+        progress_callback(100, "Complete")
+    
     return papers
 
 
-def fetch_all_recent_papers(days_back: int = 7) -> List[Paper]:
-    print(f"Fetching papers from last {days_back} days...")
-    papers = fetch_papers(days_back=days_back)
-    print(f"Found {len(papers)} papers total")
+def fetch_all_recent_papers(days_back: int = 7, progress_callback=None) -> List[Paper]:
+    if progress_callback:
+        progress_callback(0, "Starting...")
+    
+    papers = fetch_papers(days_back=days_back, progress_callback=progress_callback)
     return papers
