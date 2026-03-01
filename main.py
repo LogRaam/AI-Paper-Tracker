@@ -219,6 +219,7 @@ class MainWindow(QMainWindow):
 
     def on_fetch_progress(self, pct: int, message: str):
         self.progress_bar.setValue(pct)
+        print(message, flush=True)
         self.status_bar.showMessage(message)
 
     def on_fetch_finished(self, new_count: int):
@@ -229,12 +230,16 @@ class MainWindow(QMainWindow):
         self.load_papers()
         self.update_status()
         
-        self.status_bar.showMessage(f"Fetch complete! {new_count} new papers added.")
+        msg = f"Fetch complete! {new_count} new papers added."
+        print(msg, flush=True)
+        self.status_bar.showMessage(msg)
 
     def on_fetch_error(self, error: str):
         self.refresh_btn.setEnabled(True)
         self.refresh_btn.setText("🔄 Refresh")
         self.progress_bar.setVisible(False)
+        
+        print(f"ERROR: {error}", flush=True)
         self.status_bar.showMessage(f"Error: {error}")
 
     def toggle_auto_refresh(self, state: int):
