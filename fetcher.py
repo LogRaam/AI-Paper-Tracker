@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Callable
 import sys
 import re
+import time
 
 from models import Paper, CATEGORIES, CATEGORY_CODES
 
@@ -108,6 +109,8 @@ def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback:
         except Exception as e:
             print(f"Error fetching category {cat_code}: {e}", flush=True)
             continue
+        
+        time.sleep(3)
     
     print(f"Complete! Found {len(papers)} papers", flush=True)
     

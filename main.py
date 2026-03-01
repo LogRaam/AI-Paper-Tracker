@@ -148,7 +148,7 @@ class MainWindow(QMainWindow):
             if paper.is_meta_analysis:
                 title = f"📊 {title}"
             
-            date = paper.paper_date[:10] if hasattr(paper, 'published') else ''
+            date = paper.published[:10] if hasattr(paper, 'published') else ''
             display_text = f"{date} - {title[:80]}{'...' if len(title) > 80 else ''}"
             
             item = QListWidgetItem(display_text)
