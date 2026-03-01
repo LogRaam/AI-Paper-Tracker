@@ -205,7 +205,7 @@ class MainWindow(QMainWindow):
 
     def on_fetch_progress(self, pct: int, message: str):
         self.progress_bar.setValue(pct)
-        self.status_bar.showMessage(f"[{pct}%] {message}")
+        self.status_bar.showMessage(message)
 
     def on_fetch_finished(self, new_count: int):
         self.refresh_btn.setEnabled(True)
@@ -238,11 +238,13 @@ class MainWindow(QMainWindow):
         count = self.db.get_paper_count()
         last_fetch = self.db.get_last_fetch()
         
-        status = f"Total papers: {count}"
-        if last_fetch:
-            status += f" | Last fetch: {last_fetch[:16]}"
-        
-        self.status_bar.showMessage(status)
+        if count == 0:
+            self.status_bar.showMessage("Welcome! Click 'Refresh' to fetch papers from arXiv.")
+        else:
+            status = f"Total papers: {count}"
+            if last_fetch:
+                status += f" | Last fetch: {last_fetch[:16]}"
+            self.status_bar.showMessage(status)
 
 
 def main():

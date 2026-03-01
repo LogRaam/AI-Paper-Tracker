@@ -51,7 +51,7 @@ def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback:
         cat_name = CATEGORIES.get(cat_code, cat_code)
         progress_pct = int((idx / total_cats) * 100)
         
-        msg = f"[{progress_pct}%] Fetching: {cat_name}"
+        msg = f"Fetching: {cat_name}"
         print(msg, flush=True)
         
         if progress_callback:
@@ -109,7 +109,7 @@ def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback:
             print(f"Error fetching category {cat_code}: {e}", flush=True)
             continue
     
-    print(f"[100%] Complete! Found {len(papers)} papers", flush=True)
+    print(f"Complete! Found {len(papers)} papers", flush=True)
     
     if progress_callback:
         progress_callback(100, "Complete")
