@@ -9,7 +9,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QTimer, QThread, Signal
 from PySide6.QtGui import QAction
 
-from models import Database, Paper, CATEGORIES, CATEGORY_CODES
+from models import Paper, CATEGORIES, CATEGORY_CODES
+from database import Database
 
 
 class FetchWorker(QThread):
@@ -25,15 +26,24 @@ class FetchWorker(QThread):
     def run(self):
         try:
             from fetcher import fetch_all_recent_papers
+            from paperswithcode_fetcher import fetch_all_papers_with_code
             
             def progress_callback(pct, message):
                 self.progress.emit(pct, message)
             
-            papers = fetch_all_recent_papers(self.days_back, progress_callback=progress_callback, start_date=self.start_date)
+            all_papers = []
+            
+            self.progress.emit(0, "Fetching from arXiv...")
+            papers_arxiv = fetch_all_recent_papers(self.days_back, progress_callback=progress_callback, start_date=self.start_date)
+            all_papers.extend(papers_arxiv)
+            
+            self.progress.emit(50, "Fetching from Papers with Code...")
+            papers_pwc = fetch_all_papers_with_code(progress_callback=progress_callback, start_date=self.start_date)
+            all_papers.extend(papers_pwc)
             
             db = Database()
             existing_count = db.get_paper_count()
-            db.add_papers(papers)
+            db.add_papers(all_papers)
             new_count = db.get_paper_count()
             
             self.finished.emit(new_count - existing_count)
