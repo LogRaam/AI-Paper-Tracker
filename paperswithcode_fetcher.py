@@ -18,6 +18,8 @@ def fetch_papers_with_code(progress_callback: Callable = None, start_date: str =
     
     page = 1
     total_fetched = 0
+    skipped_no_arxiv = 0
+    skipped_old = 0
     
     while True:
         if progress_callback:
@@ -27,19 +29,23 @@ def fetch_papers_with_code(progress_callback: Callable = None, start_date: str =
             result = client.paper_list(page=page, items_per_page=50)
             
             if not result.results:
+                print(f"No more results at page {page}", flush=True)
                 break
             
             for p in result.results:
                 try:
                     if start_date:
                         if p.published and str(p.published) <= start_date:
+                            skipped_old += 1
                             continue
                     elif p.published:
                         cutoff = datetime.now().date() - timedelta(days=7)
                         if p.published < cutoff:
+                            skipped_old += 1
                             continue
                     
                     if not p.arxiv_id:
+                        skipped_no_arxiv += 1
                         continue
                     
                     title = p.title or ""
@@ -74,7 +80,10 @@ def fetch_papers_with_code(progress_callback: Callable = None, start_date: str =
                     total_fetched += 1
                     
                 except Exception as e:
+                    print(f"Error processing paper: {e}", flush=True)
                     continue
+            
+            print(f"Page {page}: fetched {len(result.results)} papers, total so far: {total_fetched}, skipped old: {skipped_old}, skipped no arxiv: {skipped_no_arxiv}", flush=True)
             
             if not result.next_page:
                 break
@@ -86,6 +95,7 @@ def fetch_papers_with_code(progress_callback: Callable = None, start_date: str =
             print(f"Error fetching Papers with Code: {e}", flush=True)
             break
     
+    print(f"Papers with Code fetch complete: {total_fetched} papers, skipped old: {skipped_old}, skipped no arxiv: {skipped_no_arxiv}", flush=True)
     return papers
 
 
