@@ -1,5 +1,5 @@
 import arxiv
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List
 import re
 
@@ -41,7 +41,7 @@ def get_category_display(categories_str: str) -> str:
 
 def fetch_papers(days_back: int = 7, max_results: int = 3000) -> List[Paper]:
     papers = []
-    cutoff_date = datetime.now() - timedelta(days=days_back)
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
     
     client = arxiv.Client()
     
@@ -61,8 +61,10 @@ def fetch_papers(days_back: int = 7, max_results: int = 3000) -> List[Paper]:
             for result in results:
                 try:
                     published_dt = result.published
+                    if published_dt.tzinfo is not None:
+                        published_dt = published_dt.replace(tzinfo=None)
                     
-                    if published_dt < cutoff_date:
+                    if published_dt < cutoff_date.replace(tzinfo=None):
                         continue
                     
                     arxiv_id = result.entry_id.split('/')[-1]
