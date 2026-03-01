@@ -66,7 +66,8 @@ def fetch_papers_with_code(progress_callback: Callable = None, start_date: str =
                         updated=updated,
                         categories=categories,
                         pdf_url=pdf_url,
-                        is_meta_analysis=False
+                        is_meta_analysis=False,
+                        source="Papers with Code"
                     )
                     
                     papers.append(paper)

@@ -111,6 +111,14 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(QLabel("Category:"))
         toolbar.addWidget(self.category_combo)
         
+        self.source_combo = QComboBox()
+        self.source_combo.addItem("All Sources", None)
+        self.source_combo.addItem("arXiv", "arXiv")
+        self.source_combo.addItem("Papers with Code", "Papers with Code")
+        self.source_combo.currentIndexChanged.connect(self.on_search)
+        toolbar.addWidget(QLabel("Source:"))
+        toolbar.addWidget(self.source_combo)
+        
         self.meta_checkbox = QCheckBox("Meta-analyses only")
         self.meta_checkbox.stateChanged.connect(self.on_search)
         toolbar.addWidget(self.meta_checkbox)
@@ -198,10 +206,11 @@ class MainWindow(QMainWindow):
     def on_search(self):
         query = self.search_box.text()
         category = self.category_combo.currentData()
+        source = self.source_combo.currentData()
         meta_only = self.meta_checkbox.isChecked()
         
-        if query or category or meta_only:
-            self.papers = self.db.search_papers(query, category, meta_only)
+        if query or category or source or meta_only:
+            self.papers = self.db.search_papers(query, category, meta_only, source)
         else:
             self.papers = self.db.get_all_papers(limit=1000)
         

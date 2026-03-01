@@ -106,7 +106,8 @@ def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback:
                         updated=updated,
                         categories=categories,
                         pdf_url=pdf_url,
-                        is_meta_analysis=meta
+                        is_meta_analysis=meta,
+                        source="arXiv"
                     )
                     
                     papers.append(paper)

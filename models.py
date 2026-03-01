@@ -15,7 +15,8 @@ class Paper:
         updated: str,
         categories: str,
         pdf_url: str,
-        is_meta_analysis: bool = False
+        is_meta_analysis: bool = False,
+        source: str = "arXiv"
     ):
         self.arxiv_id = arxiv_id
         self.title = title
@@ -26,6 +27,7 @@ class Paper:
         self.categories = categories
         self.pdf_url = pdf_url
         self.is_meta_analysis = is_meta_analysis
+        self.source = source
 
     def to_dict(self):
         return {
@@ -37,7 +39,8 @@ class Paper:
             'updated': self.updated,
             'categories': self.categories,
             'pdf_url': self.pdf_url,
-            'is_meta_analysis': int(self.is_meta_analysis)
+            'is_meta_analysis': int(self.is_meta_analysis),
+            'source': self.source
         }
 
 

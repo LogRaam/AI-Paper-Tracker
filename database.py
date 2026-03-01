@@ -25,14 +25,22 @@ class Database:
                 categories TEXT,
                 pdf_url TEXT,
                 is_meta_analysis INTEGER DEFAULT 0,
+                source TEXT DEFAULT 'arXiv',
                 fetched_at TEXT
             )
         ''')
+        try:
+            cursor.execute('ALTER TABLE papers ADD COLUMN source TEXT DEFAULT "arXiv"')
+        except:
+            pass
         cursor.execute('''
             CREATE INDEX IF NOT EXISTS idx_published ON papers(published)
         ''')
         cursor.execute('''
             CREATE INDEX IF NOT EXISTS idx_categories ON papers(categories)
+        ''')
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_source ON papers(source)
         ''')
         conn.commit()
         conn.close()
@@ -65,14 +73,15 @@ class Database:
         cursor = conn.cursor()
         now = datetime.now().isoformat()
         for paper in papers:
+            source = getattr(paper, 'source', 'arXiv')
             cursor.execute('''
                 INSERT OR IGNORE INTO papers 
-                (arxiv_id, title, abstract, authors, published, updated, categories, pdf_url, is_meta_analysis, fetched_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (arxiv_id, title, abstract, authors, published, updated, categories, pdf_url, is_meta_analysis, source, fetched_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 paper.arxiv_id, paper.title, paper.abstract, paper.authors,
                 paper.published, paper.updated, paper.categories, paper.pdf_url,
-                int(paper.is_meta_analysis), now
+                int(paper.is_meta_analysis), source, now
             ))
         conn.commit()
         conn.close()
@@ -81,7 +90,7 @@ class Database:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT arxiv_id, title, abstract, authors, published, updated, categories, pdf_url, is_meta_analysis
+            SELECT arxiv_id, title, abstract, authors, published, updated, categories, pdf_url, is_meta_analysis, source
             FROM papers 
             ORDER BY published DESC
             LIMIT ?
@@ -90,12 +99,12 @@ class Database:
         conn.close()
         return [self._row_to_paper(row) for row in rows]
 
-    def search_papers(self, query: str, category: Optional[str] = None, meta_only: bool = False) -> List:
+    def search_papers(self, query: str, category: Optional[str] = None, meta_only: bool = False, source: Optional[str] = None) -> List:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         sql = '''
-            SELECT arxiv_id, title, abstract, authors, published, updated, categories, pdf_url, is_meta_analysis
+            SELECT arxiv_id, title, abstract, authors, published, updated, categories, pdf_url, is_meta_analysis, source
             FROM papers 
             WHERE (title LIKE ? OR abstract LIKE ?)
         '''
@@ -108,6 +117,10 @@ class Database:
         if meta_only:
             sql += ' AND is_meta_analysis = 1'
         
+        if source and source != 'All':
+            sql += ' AND source = ?'
+            params.append(source)
+        
         sql += ' ORDER BY published DESC LIMIT 500'
         
         cursor.execute(sql, params)
@@ -119,7 +132,7 @@ class Database:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT arxiv_id, title, abstract, authors, published, updated, categories, pdf_url, is_meta_analysis
+            SELECT arxiv_id, title, abstract, authors, published, updated, categories, pdf_url, is_meta_analysis, source
             FROM papers 
             WHERE categories LIKE ?
             ORDER BY published DESC
@@ -133,7 +146,7 @@ class Database:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT arxiv_id, title, abstract, authors, published, updated, categories, pdf_url, is_meta_analysis
+            SELECT arxiv_id, title, abstract, authors, published, updated, categories, pdf_url, is_meta_analysis, source
             FROM papers 
             WHERE is_meta_analysis = 1
             ORDER BY published DESC
@@ -178,5 +191,6 @@ class Database:
             updated=row[5],
             categories=row[6],
             pdf_url=row[7],
-            is_meta_analysis=bool(row[8])
+            is_meta_analysis=bool(row[8]),
+            source=row[9] if len(row) > 9 else 'arXiv'
         )
