@@ -1,5 +1,4 @@
 arxiv
 PySide6
-APScheduler
 paperswithcode-client
 tea-client==0.0.8

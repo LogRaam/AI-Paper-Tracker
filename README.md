@@ -79,15 +79,16 @@ AI-Paper-Tracker/
 - Python 3.8+
 - arxiv - arXiv API wrapper
 - PySide6 - Cross-platform GUI framework (LGPL licensed)
-- APScheduler - Task scheduling
+- paperswithcode-client - Papers with Code API (for papers with code)
+- tea-client==0.0.8 - Required for paperswithcode-client
 
 ## How It Works
 
-1. **Data Source**: Uses the public arXiv API to fetch papers from AI-related categories
+1. **Data Sources**: Uses arXiv API and Papers with Code to fetch papers
 2. **Deduplication**: Only adds new papers not already in the database
 3. **Meta-Analysis Detection**: Scans titles and abstracts for keywords like "meta-analysis", "systematic review", "survey", etc.
 4. **Storage**: All data stored locally in SQLite (papers.db)
-5. **Updates**: Configurable auto-refresh (default: hourly)
+5. **Updates**: Configurable auto-refresh (default: hourly) using QTimer
 
 ## For Developers
 
