@@ -42,8 +42,7 @@ def fetch_papers_huggingface(progress_callback: Callable = None, start_date: str
                     
                     pdf_url = f"https://arxiv.org/abs/{arxiv_id}" if arxiv_id else ""
                     
-                    if start_date and published and published <= start_date:
-                        continue
+                    # Hugging Face papers are already trending/recent, don't filter by date
                     
                     paper = Paper(
                         arxiv_id=arxiv_id,
