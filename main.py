@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QListWidget, QListWidgetItem, QTextBrowser, QLineEdit, QPushButton,
     QComboBox, QLabel, QProgressBar, QGroupBox, QCheckBox, QSplitter,
-    QStatusBar, QMenuBar, QMenu
+    QStatusBar, QMenuBar, QMenu, QPlainTextEdit
 )
 from PySide6.QtCore import Qt, QTimer, QThread, Signal
 from PySide6.QtGui import QAction
@@ -45,6 +45,8 @@ class FetchWorker(QThread):
         from datetime import datetime
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
+        self.log(f"Starting fetch from arXiv...")
+        
         try:
             from fetcher import fetch_all_recent_papers
             
@@ -54,24 +56,27 @@ class FetchWorker(QThread):
             all_papers = []
             
             self.progress.emit(0, "Fetching from arXiv...")
-            print(f"[{current_time}] Fetching from arXiv...", flush=True)
+            self.log("Fetching from arXiv...")
+            
             papers_arxiv = fetch_all_recent_papers(self.days_back, progress_callback=progress_callback, start_date=self.start_date)
             all_papers.extend(papers_arxiv)
             
             self.progress.emit(50, "Fetching from Hugging Face...")
-            print(f"[{current_time}] Fetching from Hugging Face...", flush=True)
+            self.log("Fetching from Hugging Face...")
+            
             try:
                 from huggingface_fetcher import fetch_all_papers_huggingface
                 papers_hf = fetch_all_papers_huggingface(progress_callback=progress_callback, start_date=self.start_date)
                 all_papers.extend(papers_hf)
             except Exception as hf_err:
-                print(f"[{current_time}] WARNING: Hugging Face unavailable: {hf_err}", flush=True)
+                self.log(f"WARNING: Hugging Face unavailable: {hf_err}")
             
             db = Database()
             existing_count = db.get_paper_count()
             db.add_papers(all_papers)
             new_count = db.get_paper_count()
             
+            self.log(f"Fetch complete! {new_count} new papers added.")
             self.finished.emit(new_count - existing_count)
         except Exception as e:
             self.error.emit(str(e))
@@ -109,11 +114,20 @@ class MainWindow(QMainWindow):
         splitter.addWidget(right_widget)
         
         splitter.setSizes([500, 900])
+        
+        self.log_panel = QPlainTextEdit()
+        self.log_panel.setMaximumHeight(150)
+        self.log_panel.setReadOnly(True)
+        self.log_panel.setPlaceholderText("Logs will appear here...")
+        
         main_layout.addWidget(splitter)
+        main_layout.addWidget(self.log_panel)
         
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
         self.status_bar.showMessage("Ready")
+        
+        self.log("Application started")
 
     def create_toolbar(self):
         toolbar = QHBoxLayout()
@@ -265,23 +279,22 @@ class MainWindow(QMainWindow):
         self.load_papers()
         self.update_status()
         
-        msg = f"Fetch complete! {new_count} new papers added."
-        print(msg, flush=True)
-        self.status_bar.showMessage(msg)
+        self.log(f"Fetch complete! {new_count} new papers added.")
+        self.status_bar.showMessage(f"Fetch complete! {new_count} new papers added.")
 
     def on_fetch_error(self, error: str):
         self.refresh_btn.setEnabled(True)
         self.refresh_btn.setText("🔄 Refresh")
         self.progress_bar.setVisible(False)
         
-        print(f"ERROR: {error}", flush=True)
+        self.log(f"ERROR: {error}")
         self.status_bar.showMessage(f"Error: {error}")
 
     def toggle_auto_refresh(self, state: int):
         from datetime import datetime
         is_checked = bool(state)
         
-        print(f"Auto-refresh toggle: state={state}, is_checked={is_checked}", flush=True)
+        self.log(f"Auto-refresh toggle: state={state}, is_checked={is_checked}")
         
         if is_checked:
             self.auto_refresh_worker = AutoRefreshWorker(
@@ -290,13 +303,19 @@ class MainWindow(QMainWindow):
             )
             self.auto_refresh_worker.start()
             current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            print(f"[{current_time}] Auto-refresh enabled - will run every hour", flush=True)
+            self.log(f"Auto-refresh enabled - will run every hour")
             self.status_bar.showMessage("Auto-refresh enabled (every hour)")
         else:
             if hasattr(self, 'auto_refresh_worker'):
                 self.auto_refresh_worker.stop()
                 self.auto_refresh_worker = None
             self.status_bar.showMessage("Auto-refresh disabled")
+
+    def log(self, message: str):
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        formatted = f"[{timestamp}] {message}"
+        if hasattr(self, 'log_panel'):
+            self.log_panel.appendPlainText(formatted)
 
     def update_status(self):
         count = self.db.get_paper_count()
