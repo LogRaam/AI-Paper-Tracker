@@ -102,6 +102,7 @@ class MainWindow(QMainWindow):
         self.db = Database()
         self.fetch_worker = None
         self.papers = []
+        self.is_fetching = False
         
         self.init_ui()
         self.load_papers()
@@ -303,7 +304,12 @@ class MainWindow(QMainWindow):
             self.populate_list(self.papers)
 
     def start_fetch(self):
+        if self.is_fetching:
+            return
+        
+        self.is_fetching = True
         self.refresh_btn.setEnabled(False)
+        self.fetch_month_btn.setEnabled(False)
         self.refresh_btn.setText("Fetching...")
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
@@ -359,6 +365,9 @@ class MainWindow(QMainWindow):
             self.fetch_by_month(selected_year, selected_month)
 
     def fetch_by_month(self, year: int, month: int):
+        if self.is_fetching:
+            return
+        
         import calendar
         from datetime import datetime
         
@@ -368,6 +377,8 @@ class MainWindow(QMainWindow):
         
         month_name = calendar.month_name[month]
         
+        self.is_fetching = True
+        self.refresh_btn.setEnabled(False)
         self.fetch_month_btn.setEnabled(False)
         self.fetch_month_btn.setText(f"Fetching {month_name} {year}...")
         self.progress_bar.setVisible(True)
@@ -382,8 +393,10 @@ class MainWindow(QMainWindow):
         self.fetch_worker.start()
 
     def on_fetch_month_finished(self, new_count: int):
+        self.is_fetching = False
         self.fetch_month_btn.setEnabled(True)
         self.fetch_month_btn.setText("📅 Fetch by month")
+        self.refresh_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
         
         self.load_papers()
@@ -398,8 +411,10 @@ class MainWindow(QMainWindow):
         self.status_bar.showMessage(message)
 
     def on_fetch_finished(self, new_count: int):
+        self.is_fetching = False
         self.refresh_btn.setEnabled(True)
         self.refresh_btn.setText("🔄 Refresh")
+        self.fetch_month_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
         
         self.load_papers()
@@ -410,8 +425,10 @@ class MainWindow(QMainWindow):
         self.status_bar.showMessage(f"Fetch complete! {new_count} new papers added. Total: {count}")
 
     def on_fetch_error(self, error: str):
+        self.is_fetching = False
         self.refresh_btn.setEnabled(True)
         self.refresh_btn.setText("🔄 Refresh")
+        self.fetch_month_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
         
         self.log(f"ERROR: {error}")
