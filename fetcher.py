@@ -41,12 +41,17 @@ def get_category_display(categories_str: str) -> str:
     return ', '.join(display)
 
 
-def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback: Callable = None, start_date: str = None) -> List[Paper]:
+def fetch_papers(days_back: int = 7, max_results: int = 10000, progress_callback: Callable = None, start_date: str = None, end_date: str = None, log_callback: Callable = None) -> List[Paper]:
     papers = []
     if start_date:
         cutoff_date = datetime.strptime(start_date, '%Y-%m-%d')
     else:
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
+    
+    if end_date:
+        end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+    else:
+        end_dt = None
     
     client = arxiv.Client()
     total_cats = len(CATEGORY_CODES)
@@ -56,7 +61,11 @@ def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback:
         progress_pct = int((idx / total_cats) * 100)
         
         msg = f"Fetching: {cat_name}"
-        print(msg, flush=True)
+        
+        if log_callback:
+            log_callback(msg)
+        else:
+            print(msg, flush=True)
         
         if progress_callback:
             progress_callback(progress_pct, msg)
@@ -64,7 +73,7 @@ def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback:
         search = arxiv.Search(
             query=f"cat:{cat_code}",
             max_results=max_results,
-            sort_by=arxiv.SortCriterion.SubmittedDate,
+            sort_by=arxiv.SortCriterion.UpdatedDate,
             sort_order=arxiv.SortOrder.Descending
         )
         
@@ -73,17 +82,28 @@ def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback:
             
             for result in results:
                 try:
+                    updated_dt = result.updated
+                    if updated_dt and updated_dt.tzinfo is not None:
+                        updated_dt = updated_dt.replace(tzinfo=None)
+                    elif updated_dt is None:
+                        updated_dt = result.published
+                        if updated_dt and updated_dt.tzinfo is not None:
+                            updated_dt = updated_dt.replace(tzinfo=None)
+                    
                     published_dt = result.published
                     if published_dt.tzinfo is not None:
                         published_dt = published_dt.replace(tzinfo=None)
                     
                     if start_date:
                         paper_date = datetime.strptime(start_date, '%Y-%m-%d')
-                        if published_dt <= paper_date:
+                        if updated_dt < paper_date:
                             continue
                     else:
-                        if published_dt < cutoff_date.replace(tzinfo=None):
+                        if updated_dt < cutoff_date.replace(tzinfo=None):
                             continue
+                    
+                    if end_dt and updated_dt > end_dt:
+                        continue
                     
                     arxiv_id = result.entry_id.split('/')[-1]
                     
@@ -116,12 +136,20 @@ def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback:
                     continue
                     
         except Exception as e:
-            print(f"Error fetching category {cat_code}: {e}", flush=True)
+            err_msg = f"Error fetching category {cat_code}: {e}"
+            if log_callback:
+                log_callback(err_msg)
+            else:
+                print(err_msg, flush=True)
             continue
         
         time.sleep(3)
     
-    print(f"Complete! Found {len(papers)} papers", flush=True)
+    complete_msg = f"Complete! Found {len(papers)} papers"
+    if log_callback:
+        log_callback(complete_msg)
+    else:
+        print(complete_msg, flush=True)
     
     if progress_callback:
         progress_callback(100, "Complete")
@@ -129,14 +157,21 @@ def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback:
     return papers
 
 
-def fetch_all_recent_papers(days_back: int = 7, progress_callback: Callable = None, start_date: str = None) -> List[Paper]:
+def fetch_all_recent_papers(days_back: int = 7, progress_callback: Callable = None, start_date: str = None, end_date: str = None, log_callback: Callable = None) -> List[Paper]:
     from datetime import datetime
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
-    if start_date:
-        print(f"[{current_time}] Starting fetch from {start_date} to today...", flush=True)
+    if start_date and end_date:
+        msg = f"[{current_time}] Starting fetch from {start_date} to {end_date}..."
+    elif start_date:
+        msg = f"[{current_time}] Starting fetch from {start_date} to today..."
     else:
-        print(f"[{current_time}] Starting fetch for last {days_back} days...", flush=True)
+        msg = f"[{current_time}] Starting fetch for last {days_back} days..."
     
-    papers = fetch_papers(days_back=days_back, progress_callback=progress_callback, start_date=start_date)
+    if log_callback:
+        log_callback(msg)
+    else:
+        print(msg, flush=True)
+    
+    papers = fetch_papers(days_back=days_back, progress_callback=progress_callback, start_date=start_date, end_date=end_date, log_callback=log_callback)
     return papers

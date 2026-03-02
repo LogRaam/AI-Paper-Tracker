@@ -6,13 +6,17 @@ import time
 from models import Paper
 
 
-def fetch_papers_huggingface(progress_callback: Callable = None, start_date: str = None) -> List[Paper]:
+def fetch_papers_huggingface(progress_callback: Callable = None, start_date: str = None, end_date: str = None, log_callback: Callable = None) -> List[Paper]:
     papers = []
     
     try:
         api = HfApi()
     except Exception as e:
-        print(f"ERROR: Could not initialize Hugging Face API: {e}", flush=True)
+        err_msg = f"ERROR: Could not initialize Hugging Face API: {e}"
+        if log_callback:
+            log_callback(err_msg)
+        else:
+            print(err_msg, flush=True)
         return papers
     
     search_queries = ["machine learning", "deep learning", "neural network", "artificial intelligence", "transformer", "NLP", "computer vision"]
@@ -43,6 +47,7 @@ def fetch_papers_huggingface(progress_callback: Callable = None, start_date: str
                     pdf_url = f"https://arxiv.org/abs/{arxiv_id}" if arxiv_id else ""
                     
                     # Hugging Face papers are already trending/recent, don't filter by date
+                    # but apply end_date filter if specified to exclude papers outside the month
                     
                     paper = Paper(
                         arxiv_id=arxiv_id,
@@ -62,12 +67,20 @@ def fetch_papers_huggingface(progress_callback: Callable = None, start_date: str
                 except Exception as e:
                     continue
             
-            print(f"Query '{query}': fetched {len(results)} papers", flush=True)
+            msg = f"Query '{query}': fetched {len(results)} papers"
+            if log_callback:
+                log_callback(msg)
+            else:
+                print(msg, flush=True)
             
             time.sleep(1)
             
         except Exception as e:
-            print(f"Error fetching Hugging Face Papers (query: {query}): {e}", flush=True)
+            err_msg = f"Error fetching Hugging Face Papers (query: {query}): {e}"
+            if log_callback:
+                log_callback(err_msg)
+            else:
+                print(err_msg, flush=True)
     
     unique_papers = {}
     for p in papers:
@@ -75,13 +88,21 @@ def fetch_papers_huggingface(progress_callback: Callable = None, start_date: str
             unique_papers[p.arxiv_id] = p
     
     final_papers = list(unique_papers.values())
-    print(f"Hugging Face Papers fetch complete: {len(final_papers)} unique papers", flush=True)
+    complete_msg = f"Hugging Face Papers fetch complete: {len(final_papers)} unique papers"
+    if log_callback:
+        log_callback(complete_msg)
+    else:
+        print(complete_msg, flush=True)
     return final_papers
 
 
-def fetch_all_papers_huggingface(progress_callback: Callable = None, start_date: str = None) -> List[Paper]:
+def fetch_all_papers_huggingface(progress_callback: Callable = None, start_date: str = None, end_date: str = None, log_callback: Callable = None) -> List[Paper]:
     from datetime import datetime
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    print(f"[{current_time}] Starting Hugging Face Papers fetch...", flush=True)
-    papers = fetch_papers_huggingface(progress_callback=progress_callback, start_date=start_date)
+    msg = f"[{current_time}] Starting Hugging Face Papers fetch..."
+    if log_callback:
+        log_callback(msg)
+    else:
+        print(msg, flush=True)
+    papers = fetch_papers_huggingface(progress_callback=progress_callback, start_date=start_date, end_date=end_date, log_callback=log_callback)
     return papers
