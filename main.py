@@ -224,7 +224,7 @@ class MainWindow(QMainWindow):
         return widget
 
     def load_papers(self):
-        self.papers = self.db.get_all_papers(limit=1000)
+        self.papers = self.db.get_all_papers()
         self.populate_list(self.papers)
 
     def populate_list(self, papers: list):
@@ -284,7 +284,7 @@ class MainWindow(QMainWindow):
         if query or category or source or meta_only or favorites_only:
             self.papers = self.db.search_papers(query, category, meta_only, source, favorites_only)
         else:
-            self.papers = self.db.get_all_papers(limit=1000)
+            self.papers = self.db.get_all_papers()
         
         self.populate_list(self.papers)
 

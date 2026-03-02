@@ -1,10 +1,12 @@
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class Paper:
+    """Represents a research paper from arXiv or Hugging Face."""
+
     def __init__(
         self,
         arxiv_id: str,
@@ -18,20 +20,20 @@ class Paper:
         is_meta_analysis: bool = False,
         source: str = "arXiv",
         is_favorite: bool = False
-    ):
-        self.arxiv_id = arxiv_id
-        self.title = title
-        self.abstract = abstract
-        self.authors = authors
-        self.published = published
-        self.updated = updated
-        self.categories = categories
-        self.pdf_url = pdf_url
-        self.is_meta_analysis = is_meta_analysis
-        self.source = source
-        self.is_favorite = is_favorite
+    ) -> None:
+        self.arxiv_id: str = arxiv_id
+        self.title: str = title
+        self.abstract: str = abstract
+        self.authors: str = authors
+        self.published: str = published
+        self.updated: str = updated
+        self.categories: str = categories
+        self.pdf_url: str = pdf_url
+        self.is_meta_analysis: bool = is_meta_analysis
+        self.source: str = source
+        self.is_favorite: bool = is_favorite
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         return {
             'arxiv_id': self.arxiv_id,
             'title': self.title,
@@ -145,15 +147,14 @@ class Database:
         conn.commit()
         conn.close()
 
-    def get_all_papers(self, limit: int = 500) -> List:
+    def get_all_papers(self) -> List:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute('''
             SELECT arxiv_id, title, abstract, authors, published, updated, categories, pdf_url, is_meta_analysis, source, is_favorite
             FROM papers 
             ORDER BY published DESC
-            LIMIT ?
-        ''', (limit,))
+        ''')
         rows = cursor.fetchall()
         conn.close()
         return [self._row_to_paper(row) for row in rows]
@@ -183,14 +184,14 @@ class Database:
         if favorites_only:
             sql += ' AND is_favorite = 1'
         
-        sql += ' ORDER BY published DESC LIMIT 500'
+        sql += ' ORDER BY published DESC'
         
         cursor.execute(sql, params)
         rows = cursor.fetchall()
         conn.close()
         return [self._row_to_paper(row) for row in rows]
 
-    def get_papers_by_category(self, category: str, limit: int = 500) -> List:
+    def get_papers_by_category(self, category: str) -> List:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute('''
@@ -198,13 +199,12 @@ class Database:
             FROM papers 
             WHERE categories LIKE ?
             ORDER BY published DESC
-            LIMIT ?
-        ''', (f'%{category}%', limit))
+        ''', (f'%{category}%',))
         rows = cursor.fetchall()
         conn.close()
         return [self._row_to_paper(row) for row in rows]
 
-    def get_meta_analyses(self, limit: int = 500) -> List:
+    def get_meta_analyses(self) -> List:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute('''
@@ -212,8 +212,7 @@ class Database:
             FROM papers 
             WHERE is_meta_analysis = 1
             ORDER BY published DESC
-            LIMIT ?
-        ''', (limit,))
+        ''')
         rows = cursor.fetchall()
         conn.close()
         return [self._row_to_paper(row) for row in rows]
