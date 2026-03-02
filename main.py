@@ -279,7 +279,11 @@ class MainWindow(QMainWindow):
 
     def toggle_auto_refresh(self, state: int):
         from datetime import datetime
-        if state == Qt.Checked:
+        is_checked = bool(state)
+        
+        print(f"Auto-refresh toggle: state={state}, is_checked={is_checked}", flush=True)
+        
+        if is_checked:
             self.auto_refresh_worker = AutoRefreshWorker(
                 refresh_callback=self.start_fetch,
                 interval_hours=1
