@@ -24,6 +24,9 @@ class FetchWorker(QThread):
         self.start_date = start_date
 
     def run(self):
+        from datetime import datetime
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
         try:
             from fetcher import fetch_all_recent_papers
             
@@ -33,18 +36,18 @@ class FetchWorker(QThread):
             all_papers = []
             
             self.progress.emit(0, "Fetching from arXiv...")
-            print("Fetching from arXiv...", flush=True)
+            print(f"[{current_time}] Fetching from arXiv...", flush=True)
             papers_arxiv = fetch_all_recent_papers(self.days_back, progress_callback=progress_callback, start_date=self.start_date)
             all_papers.extend(papers_arxiv)
             
             self.progress.emit(50, "Fetching from Hugging Face...")
-            print("Fetching from Hugging Face...", flush=True)
+            print(f"[{current_time}] Fetching from Hugging Face...", flush=True)
             try:
                 from huggingface_fetcher import fetch_all_papers_huggingface
                 papers_hf = fetch_all_papers_huggingface(progress_callback=progress_callback, start_date=self.start_date)
                 all_papers.extend(papers_hf)
             except Exception as hf_err:
-                print(f"WARNING: Hugging Face unavailable: {hf_err}", flush=True)
+                print(f"[{current_time}] WARNING: Hugging Face unavailable: {hf_err}", flush=True)
             
             db = Database()
             existing_count = db.get_paper_count()
@@ -256,10 +259,13 @@ class MainWindow(QMainWindow):
         self.status_bar.showMessage(f"Error: {error}")
 
     def toggle_auto_refresh(self, state: int):
+        from datetime import datetime
         if state == Qt.Checked:
             self.auto_timer = QTimer()
             self.auto_timer.timeout.connect(self.start_fetch)
             self.auto_timer.start(3600000)
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            print(f"[{current_time}] Auto-refresh enabled - will run every hour", flush=True)
             self.status_bar.showMessage("Auto-refresh enabled (every hour)")
         else:
             if hasattr(self, 'auto_timer'):

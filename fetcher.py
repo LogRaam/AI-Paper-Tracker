@@ -130,10 +130,13 @@ def fetch_papers(days_back: int = 7, max_results: int = 3000, progress_callback:
 
 
 def fetch_all_recent_papers(days_back: int = 7, progress_callback: Callable = None, start_date: str = None) -> List[Paper]:
+    from datetime import datetime
+    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
     if start_date:
-        print(f"Starting fetch from {start_date} to today...", flush=True)
+        print(f"[{current_time}] Starting fetch from {start_date} to today...", flush=True)
     else:
-        print(f"Starting fetch for last {days_back} days...", flush=True)
+        print(f"[{current_time}] Starting fetch for last {days_back} days...", flush=True)
     
     papers = fetch_papers(days_back=days_back, progress_callback=progress_callback, start_date=start_date)
     return papers

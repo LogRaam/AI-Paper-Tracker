@@ -80,6 +80,8 @@ def fetch_papers_huggingface(progress_callback: Callable = None, start_date: str
 
 
 def fetch_all_papers_huggingface(progress_callback: Callable = None, start_date: str = None) -> List[Paper]:
-    print("Starting Hugging Face Papers fetch...", flush=True)
+    from datetime import datetime
+    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    print(f"[{current_time}] Starting Hugging Face Papers fetch...", flush=True)
     papers = fetch_papers_huggingface(progress_callback=progress_callback, start_date=start_date)
     return papers
