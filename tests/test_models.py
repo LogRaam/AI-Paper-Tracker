@@ -478,3 +478,142 @@ class TestConstants:
         assert 'cs.CL' in CATEGORIES
         assert 'cs.CV' in CATEGORIES
         assert 'stat.ML' in CATEGORIES
+
+
+# ============================================================
+# Database.get_stats_overview
+# ============================================================
+
+class TestGetStatsOverview:
+    def test_empty_db(self, db):
+        stats = db.get_stats_overview()
+        assert stats['total'] == 0
+        assert stats['arxiv'] == 0
+        assert stats['hugging_face'] == 0
+        assert stats['favorites'] == 0
+        assert stats['meta_analyses'] == 0
+
+    def test_populated_db(self, populated_db):
+        stats = populated_db.get_stats_overview()
+        assert stats['total'] == 5
+        assert stats['arxiv'] == 4       # 4 default arXiv + 1 HF
+        assert stats['hugging_face'] == 1  # Paper Delta
+        assert stats['favorites'] == 1    # Paper Epsilon
+        assert stats['meta_analyses'] == 1  # Paper with survey title
+
+    def test_all_keys_present(self, db):
+        stats = db.get_stats_overview()
+        expected = {'total', 'arxiv', 'hugging_face', 'favorites', 'meta_analyses'}
+        assert set(stats.keys()) == expected
+
+
+# ============================================================
+# Database.get_stats_by_category
+# ============================================================
+
+class TestGetStatsByCategory:
+    def test_empty_db(self, db):
+        result = db.get_stats_by_category()
+        assert result == []
+
+    def test_counts_known_categories(self, populated_db):
+        result = populated_db.get_stats_by_category()
+        cat_dict = dict(result)
+        # 4 papers have cs.LG (default), Paper Beta has cs.CV
+        assert cat_dict.get('cs.LG', 0) == 4
+        assert cat_dict.get('cs.CV', 0) == 1
+
+    def test_multi_category_counted_separately(self, db):
+        # Paper with two known categories should count in both
+        p = make_paper(arxiv_id="multi", categories="cs.LG cs.CV cs.CL")
+        db.add_paper(p)
+        result = db.get_stats_by_category()
+        cat_dict = dict(result)
+        assert cat_dict.get('cs.LG', 0) == 1
+        assert cat_dict.get('cs.CV', 0) == 1
+        assert cat_dict.get('cs.CL', 0) == 1
+
+    def test_unknown_categories_excluded(self, db):
+        p = make_paper(arxiv_id="unk", categories="cs.XX unknown.cat")
+        db.add_paper(p)
+        result = db.get_stats_by_category()
+        cat_dict = dict(result)
+        assert 'cs.XX' not in cat_dict
+
+    def test_sorted_descending(self, populated_db):
+        result = populated_db.get_stats_by_category()
+        counts = [c for _, c in result]
+        assert counts == sorted(counts, reverse=True)
+
+
+# ============================================================
+# Database.get_stats_by_month
+# ============================================================
+
+class TestGetStatsByMonth:
+    def test_empty_db(self, db):
+        result = db.get_stats_by_month()
+        assert result == []
+
+    def test_groups_by_month(self, populated_db):
+        result = populated_db.get_stats_by_month()
+        # All sample papers are in January 2025
+        assert len(result) == 1
+        assert result[0][0] == "2025-01"
+        assert result[0][1] == 5
+
+    def test_multiple_months(self, db):
+        db.add_paper(make_paper(arxiv_id="jan", published="2025-01-15"))
+        db.add_paper(make_paper(arxiv_id="feb", published="2025-02-10"))
+        db.add_paper(make_paper(arxiv_id="mar", published="2025-03-05"))
+        result = db.get_stats_by_month()
+        months = [m for m, _ in result]
+        assert months == ["2025-03", "2025-02", "2025-01"]  # DESC order
+
+    def test_limit(self, db):
+        for i in range(15):
+            month = f"2025-{i+1:02d}-01" if i < 12 else f"2026-{i-11:02d}-01"
+            db.add_paper(make_paper(arxiv_id=f"p{i}", published=month))
+        result = db.get_stats_by_month(limit=5)
+        assert len(result) == 5
+
+
+# ============================================================
+# Database.get_stats_top_authors
+# ============================================================
+
+class TestGetStatsTopAuthors:
+    def test_empty_db(self, db):
+        result = db.get_stats_top_authors()
+        assert result == []
+
+    def test_counts_authors(self, populated_db):
+        result = populated_db.get_stats_top_authors()
+        author_dict = dict(result)
+        # All sample papers have "Alice, Bob" as authors
+        assert author_dict.get('Alice', 0) == 5
+        assert author_dict.get('Bob', 0) == 5
+
+    def test_different_authors(self, db):
+        db.add_paper(make_paper(arxiv_id="a1", authors="Alice, Bob"))
+        db.add_paper(make_paper(arxiv_id="a2", authors="Alice, Charlie"))
+        db.add_paper(make_paper(arxiv_id="a3", authors="Bob"))
+        result = db.get_stats_top_authors()
+        author_dict = dict(result)
+        assert author_dict['Alice'] == 2
+        assert author_dict['Bob'] == 2
+        assert author_dict['Charlie'] == 1
+
+    def test_limit(self, db):
+        for i in range(20):
+            db.add_paper(make_paper(arxiv_id=f"auth{i}", authors=f"Author{i}"))
+        result = db.get_stats_top_authors(limit=5)
+        assert len(result) == 5
+
+    def test_sorted_by_count_desc(self, db):
+        db.add_paper(make_paper(arxiv_id="x1", authors="Prolific, Rare"))
+        db.add_paper(make_paper(arxiv_id="x2", authors="Prolific, Medium"))
+        db.add_paper(make_paper(arxiv_id="x3", authors="Prolific"))
+        result = db.get_stats_top_authors()
+        counts = [c for _, c in result]
+        assert counts == sorted(counts, reverse=True)

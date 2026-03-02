@@ -14,6 +14,138 @@ from models import Paper, CATEGORIES, CATEGORY_CODES
 from database import Database
 
 
+class StatisticsDialog(QDialog):
+    """Popup window showing paper statistics with text-based bar charts."""
+
+    BAR_CHAR = "\u2588"  # Full block character
+
+    def __init__(self, db: Database, parent=None):
+        super().__init__(parent)
+        self.db = db
+        self.setWindowTitle("Statistics Dashboard")
+        self.setMinimumSize(700, 600)
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+        browser = QTextBrowser()
+        browser.setOpenExternalLinks(False)
+        browser.setHtml(self._render_html())
+        layout.addWidget(browser)
+
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.close)
+        layout.addWidget(close_btn)
+
+    # ------------------------------------------------------------------
+    # HTML rendering
+    # ------------------------------------------------------------------
+
+    def _render_html(self) -> str:
+        overview = self.db.get_stats_overview()
+        by_category = self.db.get_stats_by_category()
+        by_month = self.db.get_stats_by_month(limit=12)
+        top_authors = self.db.get_stats_top_authors(limit=10)
+
+        meta_pct = (
+            f"{overview['meta_analyses'] / overview['total'] * 100:.1f}"
+            if overview['total'] > 0 else "0"
+        )
+
+        html = f"""
+        <style>
+            body {{ font-family: Consolas, monospace; font-size: 13px; background: #1e1e1e; color: #d4d4d4; }}
+            h2 {{ color: #569cd6; border-bottom: 1px solid #333; padding-bottom: 4px; }}
+            .card-row {{ display: flex; gap: 12px; margin-bottom: 16px; }}
+            .card {{
+                background: #252526; border: 1px solid #333; border-radius: 6px;
+                padding: 12px 18px; text-align: center; min-width: 120px;
+            }}
+            .card-value {{ font-size: 22px; font-weight: bold; color: #4ec9b0; }}
+            .card-label {{ font-size: 11px; color: #888; margin-top: 4px; }}
+            .bar {{ color: #4ec9b0; }}
+            .bar-hf {{ color: #f0c674; }}
+            .bar-meta {{ color: #c586c0; }}
+            table {{ border-collapse: collapse; width: 100%; margin-bottom: 16px; }}
+            td {{ padding: 3px 8px; vertical-align: middle; }}
+            td.label {{ text-align: right; width: 100px; color: #9cdcfe; white-space: nowrap; }}
+            td.count {{ text-align: right; width: 60px; color: #b5cea8; }}
+            .author-rank {{ color: #569cd6; }}
+            .author-name {{ color: #d4d4d4; }}
+            .author-count {{ color: #b5cea8; }}
+        </style>
+
+        <h2>Overview</h2>
+        <table><tr>
+            <td class="card" style="text-align:center">
+                <div class="card-value">{overview['total']:,}</div>
+                <div class="card-label">Total Papers</div>
+            </td>
+            <td class="card" style="text-align:center">
+                <div class="card-value" style="color:#4ec9b0">{overview['arxiv']:,}</div>
+                <div class="card-label">arXiv</div>
+            </td>
+            <td class="card" style="text-align:center">
+                <div class="card-value" style="color:#f0c674">{overview['hugging_face']:,}</div>
+                <div class="card-label">Hugging Face</div>
+            </td>
+            <td class="card" style="text-align:center">
+                <div class="card-value" style="color:#dcdcaa">{overview['favorites']:,}</div>
+                <div class="card-label">Favorites</div>
+            </td>
+            <td class="card" style="text-align:center">
+                <div class="card-value" style="color:#c586c0">{overview['meta_analyses']:,}</div>
+                <div class="card-label">Meta-analyses ({meta_pct}%)</div>
+            </td>
+        </tr></table>
+        """
+
+        # -- By category --
+        html += "<h2>Papers by Category</h2><table>"
+        max_cat = by_category[0][1] if by_category else 1
+        for cat_code, count in by_category:
+            cat_name = CATEGORIES.get(cat_code, cat_code)
+            bar_len = int(count / max_cat * 30) if max_cat > 0 else 0
+            bar = self.BAR_CHAR * max(bar_len, 1)
+            html += (
+                f'<tr>'
+                f'<td class="label">{cat_name}</td>'
+                f'<td class="bar">{bar}</td>'
+                f'<td class="count">{count:,}</td>'
+                f'</tr>'
+            )
+        html += "</table>"
+
+        # -- By month --
+        html += "<h2>Papers by Month (last 12)</h2><table>"
+        max_month = by_month[0][1] if by_month else 1
+        for month_str, count in by_month:
+            bar_len = int(count / max_month * 30) if max_month > 0 else 0
+            bar = self.BAR_CHAR * max(bar_len, 1)
+            html += (
+                f'<tr>'
+                f'<td class="label">{month_str}</td>'
+                f'<td class="bar-hf">{bar}</td>'
+                f'<td class="count">{count:,}</td>'
+                f'</tr>'
+            )
+        html += "</table>"
+
+        # -- Top authors --
+        html += "<h2>Top 10 Authors</h2><table>"
+        for rank, (author, count) in enumerate(top_authors, 1):
+            html += (
+                f'<tr>'
+                f'<td class="author-rank" style="width:30px">{rank}.</td>'
+                f'<td class="author-name">{author}</td>'
+                f'<td class="author-count" style="text-align:right">{count:,} papers</td>'
+                f'</tr>'
+            )
+        html += "</table>"
+
+        return html
+
+
 class AutoRefreshWorker(QThread):
     def __init__(self, main_window, interval_hours=1):
         super().__init__()
@@ -192,6 +324,10 @@ class MainWindow(QMainWindow):
         self.fetch_month_btn = QPushButton("📅 Fetch by month")
         self.fetch_month_btn.clicked.connect(self.show_fetch_month_dialog)
         toolbar.addWidget(self.fetch_month_btn)
+        
+        self.stats_btn = QPushButton("📊 Statistics")
+        self.stats_btn.clicked.connect(self.show_statistics)
+        toolbar.addWidget(self.stats_btn)
         
         self.auto_refresh_checkbox = QCheckBox("Auto-refresh hourly")
         self.auto_refresh_checkbox.stateChanged.connect(self.toggle_auto_refresh)
@@ -463,6 +599,10 @@ class MainWindow(QMainWindow):
                 self.auto_refresh_worker.stop()
                 self.auto_refresh_worker = None
             self.status_bar.showMessage("Auto-refresh disabled")
+
+    def show_statistics(self):
+        dialog = StatisticsDialog(self.db, parent=self)
+        dialog.exec()
 
     def log(self, message: str):
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')

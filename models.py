@@ -269,3 +269,87 @@ class Database:
             source=row[9] if len(row) > 9 else 'arXiv',
             is_favorite=bool(row[10]) if len(row) > 10 else False
         )
+
+    # ------------------------------------------------------------------
+    # Statistics queries
+    # ------------------------------------------------------------------
+
+    def get_stats_overview(self) -> Dict[str, int]:
+        """Return total, per-source counts, favorites, and meta-analyses."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute('SELECT COUNT(*) FROM papers')
+        total = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM papers WHERE source = 'arXiv'")
+        arxiv_count = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM papers WHERE source = 'Hugging Face'")
+        hf_count = cursor.fetchone()[0]
+
+        cursor.execute('SELECT COUNT(*) FROM papers WHERE is_favorite = 1')
+        fav_count = cursor.fetchone()[0]
+
+        cursor.execute('SELECT COUNT(*) FROM papers WHERE is_meta_analysis = 1')
+        meta_count = cursor.fetchone()[0]
+
+        conn.close()
+        return {
+            'total': total,
+            'arxiv': arxiv_count,
+            'hugging_face': hf_count,
+            'favorites': fav_count,
+            'meta_analyses': meta_count,
+        }
+
+    def get_stats_by_category(self) -> List[Tuple[str, int]]:
+        """Return paper count per category code, sorted descending."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT categories FROM papers')
+        rows = cursor.fetchall()
+        conn.close()
+
+        from collections import Counter
+        counter: Counter = Counter()
+        for (cats_str,) in rows:
+            if cats_str:
+                for cat in cats_str.split():
+                    if cat in CATEGORIES:
+                        counter[cat] += 1
+        return counter.most_common()
+
+    def get_stats_by_month(self, limit: int = 12) -> List[Tuple[str, int]]:
+        """Return paper count per month (YYYY-MM), most recent first."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT SUBSTR(published, 1, 7) AS month, COUNT(*) AS cnt
+            FROM papers
+            WHERE published IS NOT NULL AND LENGTH(published) >= 7
+            GROUP BY month
+            ORDER BY month DESC
+            LIMIT ?
+        ''', (limit,))
+        rows = cursor.fetchall()
+        conn.close()
+        return rows
+
+    def get_stats_top_authors(self, limit: int = 10) -> List[Tuple[str, int]]:
+        """Return top authors by paper count."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT authors FROM papers')
+        rows = cursor.fetchall()
+        conn.close()
+
+        from collections import Counter
+        counter: Counter = Counter()
+        for (authors_str,) in rows:
+            if authors_str:
+                for author in authors_str.split(', '):
+                    name = author.strip()
+                    if name:
+                        counter[name] += 1
+        return counter.most_common(limit)
