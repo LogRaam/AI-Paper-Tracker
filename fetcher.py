@@ -73,7 +73,7 @@ def fetch_papers(days_back: int = 7, max_results: int = 10000, progress_callback
         search = arxiv.Search(
             query=f"cat:{cat_code}",
             max_results=max_results,
-            sort_by=arxiv.SortCriterion.UpdatedDate,
+            sort_by=arxiv.SortCriterion.LastUpdatedDate,
             sort_order=arxiv.SortOrder.Descending
         )
         
