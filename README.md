@@ -24,6 +24,8 @@ Desktop application for tracking AI research papers from arXiv and Hugging Face.
   - Filter to show only meta-analyses
 - **Direct Access**: One-click links to PDF and arXiv pages
 - **Local Storage**: SQLite database - your data stays on your machine
+- **Integrated Log Panel**: Real-time logs displayed in the app footer
+- **Background Auto-refresh**: Works even when app is minimized
 
 ## Screenshots
 
@@ -32,6 +34,7 @@ The application features:
 - Right panel: Detailed view with abstract, authors, and links
 - Toolbar: Search, category filter, source filter, meta-analysis toggle, and refresh button
 - Progress bar: Shows fetching progress
+- Log panel: Real-time logs displayed in the app footer
 - Status bar: Displays current status and paper count
 
 ## Installation
@@ -46,10 +49,14 @@ pip install -r requirements.txt
 ### Quick Start
 
 ```bash
+# Option 1: Double-click run.bat (recommended - opens without terminal)
+run.bat
+
+# Option 2: Via terminal
 python main.py
 ```
 
-Or double-click `run.bat` on Windows.
+Or double-click `run.bat` on Windows (recommended - runs without opening terminal).
 
 ### First Run
 
@@ -68,6 +75,8 @@ Or double-click `run.bat` on Windows.
 | **Meta-analyses** | Check the box to see only surveys/reviews |
 | **Paper Details** | Click any paper to see abstract and links |
 | **PDF Download** | Click the PDF link to download |
+| **Logs** | View real-time logs in the bottom panel |
+| **Auto-refresh** | Check "Auto-refresh hourly" for automatic updates |
 
 ### Smart Fetch
 
@@ -109,7 +118,7 @@ AI-Paper-Tracker/
 3. **Deduplication**: Uses arXiv ID to avoid duplicates
 4. **Meta-Analysis Detection**: Scans titles and abstracts for keywords like "meta-analysis", "systematic review", "survey", etc.
 5. **Storage**: All data stored locally in SQLite (papers.db)
-6. **Auto-refresh**: Uses QTimer for hourly updates
+6. **Auto-refresh**: Uses background thread for hourly updates (works when app is minimized)
 
 ## Filtering Examples
 
