@@ -34,6 +34,8 @@ Desktop application for tracking AI research papers from arXiv and Hugging Face.
 - **Background Auto-refresh**: Works even when app is minimized
 - **Fetch by Month**: Retrieve papers from a specific month/year (e.g., February 2026)
 - **Network Resilience**: Automatic retry with exponential backoff on API failures (3 attempts per request)
+- **Statistics Dashboard**: Visual overview with text bar charts — papers by category, by month, top authors, and key metrics
+- **Automated Tests**: 121 tests covering Paper, Database, fetcher logic, and retry mechanisms
 
 ## Screenshots
 
@@ -102,6 +104,7 @@ Or double-click `run.bat` on Windows (recommended - runs without opening termina
 | **Logs** | View real-time logs in the bottom panel |
 | **Auto-refresh** | Check "Auto-refresh hourly" for automatic updates |
 | **Fetch by Month** | Click "📅 Fetch by month" to retrieve papers from a specific month/year |
+| **Statistics** | Click "📊 Statistics" to see dashboard with charts and metrics |
 
 ### Smart Fetch
 
@@ -116,16 +119,21 @@ Or double-click `run.bat` on Windows (recommended - runs without opening termina
 
 ```
 AI-Paper-Tracker/
-├── main.py                    # PySide6 GUI application
+├── main.py                    # PySide6 GUI application + StatisticsDialog
 ├── fetcher.py                # arXiv API integration
 ├── huggingface_fetcher.py    # Hugging Face Papers API integration
 ├── database.py               # SQLite database management
-├── models.py                 # Data models (Paper, Category)
+├── models.py                 # Data models (Paper, Category, Database + stats queries)
 ├── requirements.txt          # Python dependencies
 ├── install.bat               # Windows installation script (creates venv, installs deps)
 ├── run.bat                   # Windows launcher script (activates venv, runs app)
 ├── README.md                 # This file
-└── papers.db                # Local database (created on first run)
+├── papers.db                # Local database (created on first run)
+└── tests/                    # Automated test suite (121 tests)
+    ├── conftest.py           # Shared fixtures
+    ├── test_models.py        # Paper + Database tests
+    ├── test_fetcher.py       # Fetcher logic + retry tests
+    └── test_huggingface.py   # HF retry tests
 ```
 
 ## Requirements
@@ -174,6 +182,18 @@ venv\Scripts\activate
 pip install -r requirements.txt
 python main.py
 ```
+
+### Running Tests
+
+```bash
+python -m pytest tests/ -v
+```
+
+121 tests covering:
+- **Paper class**: construction, defaults, to_dict conversion
+- **Database**: all CRUD methods, search filters, favorites, statistics queries
+- **Fetcher logic**: meta-analysis detection, category display, retry with exponential backoff
+- **HuggingFace**: retry mechanism
 
 ### Adding New Categories
 
