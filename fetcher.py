@@ -53,6 +53,9 @@ def fetch_papers(days_back: int = 7, max_results: int = 10000, progress_callback
     else:
         end_dt = None
     
+    # Parse start_date once before the loop
+    cutoff_start = datetime.strptime(start_date, '%Y-%m-%d') if start_date else None
+    
     client = arxiv.Client()
     total_cats = len(CATEGORY_CODES)
     
@@ -94,13 +97,13 @@ def fetch_papers(days_back: int = 7, max_results: int = 10000, progress_callback
                     if published_dt.tzinfo is not None:
                         published_dt = published_dt.replace(tzinfo=None)
                     
-                    if start_date:
-                        paper_date = datetime.strptime(start_date, '%Y-%m-%d')
-                        if updated_dt < paper_date:
-                            continue
+                    # Use cutoff_start parsed outside the loop
+                    if cutoff_start:
+                        if updated_dt < cutoff_start:
+                            break  # Stop iteration when papers become too old
                     else:
                         if updated_dt < cutoff_date.replace(tzinfo=None):
-                            continue
+                            break  # Stop iteration when papers become too old
                     
                     if end_dt and updated_dt > end_dt:
                         continue
