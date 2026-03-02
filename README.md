@@ -47,21 +47,35 @@ The application features:
 
 ## Installation
 
+### Prerequisites
+
+- Python 3.8+ ([Download](https://www.python.org/downloads/))
+  - Make sure to check **"Add Python to PATH"** during installation
+
+### Install
+
 ```bash
+# Double-click install.bat (recommended)
+install.bat
+
+# Or via terminal
 cd AI-Paper-Tracker
-pip install -r requirements.txt
+install.bat
 ```
+
+The installer will:
+1. Verify Python is installed and version >= 3.8
+2. Create a virtual environment (`venv/`)
+3. Upgrade pip
+4. Install all dependencies from `requirements.txt`
 
 ## Usage
 
 ### Quick Start
 
 ```bash
-# Option 1: Double-click run.bat (recommended - opens without terminal)
+# Double-click run.bat (recommended - opens without terminal)
 run.bat
-
-# Option 2: Via terminal
-python main.py
 ```
 
 Or double-click `run.bat` on Windows (recommended - runs without opening terminal).
@@ -108,7 +122,8 @@ AI-Paper-Tracker/
 ├── database.py               # SQLite database management
 ├── models.py                 # Data models (Paper, Category)
 ├── requirements.txt          # Python dependencies
-├── run.bat                   # Windows launcher script
+├── install.bat               # Windows installation script (creates venv, installs deps)
+├── run.bat                   # Windows launcher script (activates venv, runs app)
 ├── README.md                 # This file
 └── papers.db                # Local database (created on first run)
 ```
@@ -149,10 +164,14 @@ AI-Paper-Tracker/
 ### Running in Development
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Option 1: Use install.bat then run.bat
+install.bat
+run.bat
 
-# Run the app
+# Option 2: Manual setup
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
 python main.py
 ```
 
