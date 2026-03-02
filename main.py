@@ -28,12 +28,16 @@ class StatisticsDialog(QDialog):
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
+        self.setStyleSheet("QDialog { background-color: #1e1e1e; }")
+
         browser = QTextBrowser()
         browser.setOpenExternalLinks(False)
+        browser.setStyleSheet("QTextBrowser { background-color: #1e1e1e; color: #d4d4d4; border: none; }")
         browser.setHtml(self._render_html())
         layout.addWidget(browser)
 
         close_btn = QPushButton("Close")
+        close_btn.setStyleSheet("QPushButton { background-color: #333; color: #d4d4d4; padding: 6px 20px; border: 1px solid #555; }")
         close_btn.clicked.connect(self.close)
         layout.addWidget(close_btn)
 
