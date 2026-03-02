@@ -13,6 +13,24 @@ from models import Paper, CATEGORIES, CATEGORY_CODES
 from database import Database
 
 
+class AutoRefreshWorker(QThread):
+    def __init__(self, refresh_callback, interval_hours=1):
+        super().__init__()
+        self.refresh_callback = refresh_callback
+        self.interval_seconds = interval_hours * 3600
+        self.running = True
+    
+    def run(self):
+        import time
+        while self.running:
+            time.sleep(self.interval_seconds)
+            if self.running:
+                self.refresh_callback()
+    
+    def stop(self):
+        self.running = False
+
+
 class FetchWorker(QThread):
     progress = Signal(int, str)
     finished = Signal(int)
@@ -191,6 +209,7 @@ class MainWindow(QMainWindow):
         <p><b>Authors:</b> {paper.authors}</p>
         <p><b>Published:</b> {paper.published}</p>
         <p><b>Categories:</b> {paper.categories}</p>
+        <p><b>Source:</b> {paper.source}</p>
         <p><b>arXiv ID:</b> <a href="https://arxiv.org/abs/{paper.arxiv_id}">{paper.arxiv_id}</a></p>
         <p><b>PDF:</b> <a href="{paper.pdf_url}">Download PDF</a></p>
         """
@@ -261,15 +280,18 @@ class MainWindow(QMainWindow):
     def toggle_auto_refresh(self, state: int):
         from datetime import datetime
         if state == Qt.Checked:
-            self.auto_timer = QTimer()
-            self.auto_timer.timeout.connect(self.start_fetch)
-            self.auto_timer.start(3600000)
+            self.auto_refresh_worker = AutoRefreshWorker(
+                refresh_callback=self.start_fetch,
+                interval_hours=1
+            )
+            self.auto_refresh_worker.start()
             current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             print(f"[{current_time}] Auto-refresh enabled - will run every hour", flush=True)
             self.status_bar.showMessage("Auto-refresh enabled (every hour)")
         else:
-            if hasattr(self, 'auto_timer'):
-                self.auto_timer.stop()
+            if hasattr(self, 'auto_refresh_worker'):
+                self.auto_refresh_worker.stop()
+                self.auto_refresh_worker = None
             self.status_bar.showMessage("Auto-refresh disabled")
 
     def update_status(self):
