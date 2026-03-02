@@ -50,12 +50,13 @@ class FetchWorker(QThread):
         self.end_date = end_date
 
     def run(self):
+        import traceback
         from datetime import datetime
-        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
-        self.log.emit(f"Starting fetch from arXiv...")
         
         try:
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            self.log.emit(f"Starting fetch from arXiv...")
+            
             from fetcher import fetch_all_recent_papers
             
             def progress_callback(pct, message):
@@ -90,6 +91,8 @@ class FetchWorker(QThread):
             self.log.emit(f"Fetch complete! {new_count} new papers added.")
             self.finished.emit(new_count - existing_count)
         except Exception as e:
+            tb = traceback.format_exc()
+            self.log.emit(f"ERROR: {e}\n{tb}")
             self.error.emit(str(e))
 
 
