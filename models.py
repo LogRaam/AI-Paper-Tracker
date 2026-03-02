@@ -234,6 +234,14 @@ class Database:
         conn.close()
         return row[0] if row else None
 
+    def get_most_recent_date(self) -> Optional[str]:
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT MAX(updated) FROM papers')
+        row = cursor.fetchone()
+        conn.close()
+        return row[0] if row and row[0] else None
+
     def toggle_favorite(self, arxiv_id: str) -> bool:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()

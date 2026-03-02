@@ -33,6 +33,7 @@ Desktop application for tracking AI research papers from arXiv and Hugging Face.
 - **Integrated Log Panel**: Real-time logs displayed in the app footer
 - **Background Auto-refresh**: Works even when app is minimized
 - **Fetch by Month**: Retrieve papers from a specific month/year (e.g., February 2026)
+- **Network Resilience**: Automatic retry with exponential backoff on API failures (3 attempts per request)
 
 ## Screenshots
 
@@ -132,6 +133,7 @@ AI-Paper-Tracker/
 4. **Meta-Analysis Detection**: Scans titles and abstracts for keywords like "meta-analysis", "systematic review", "survey", etc.
 5. **Storage**: All data stored locally in SQLite (papers.db)
 6. **Auto-refresh**: Uses background thread for hourly updates (works when app is minimized)
+7. **Network Resilience**: Automatic retry with exponential backoff (3 attempts, delays of 5s, 10s, 20s) on API failures
 
 ## Filtering Examples
 

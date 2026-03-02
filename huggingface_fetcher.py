@@ -6,6 +6,24 @@ import time
 from models import Paper
 
 
+def retry_request(func, max_retries=3, initial_delay=5, log_callback=None):
+    """Execute a function with exponential backoff retry."""
+    for attempt in range(max_retries):
+        try:
+            return func()
+        except Exception as e:
+            delay = initial_delay * (2 ** attempt)
+            msg = f"Retry {attempt + 1}/{max_retries} after error: {e}. Waiting {delay}s..."
+            if log_callback:
+                log_callback(msg)
+            else:
+                print(msg, flush=True)
+            if attempt < max_retries - 1:
+                time.sleep(delay)
+            else:
+                raise
+
+
 def fetch_papers_huggingface(progress_callback: Callable = None, start_date: str = None, end_date: str = None, log_callback: Callable = None) -> List[Paper]:
     papers = []
     
@@ -26,10 +44,12 @@ def fetch_papers_huggingface(progress_callback: Callable = None, start_date: str
             progress_callback(50, f"Fetching HF: {query}")
         
         try:
-            results = list(api.list_papers(
-                query=query,
-                limit=100
-            ))
+            results = retry_request(
+                lambda: list(api.list_papers(query=query, limit=100)),
+                max_retries=3,
+                initial_delay=5,
+                log_callback=log_callback
+            )
             
             for p in results:
                 try:

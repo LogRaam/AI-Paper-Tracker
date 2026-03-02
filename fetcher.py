@@ -8,6 +8,24 @@ import time
 from models import Paper, CATEGORIES, CATEGORY_CODES
 
 
+def retry_request(func, max_retries=3, initial_delay=5, log_callback=None):
+    """Execute a function with exponential backoff retry."""
+    for attempt in range(max_retries):
+        try:
+            return func()
+        except Exception as e:
+            delay = initial_delay * (2 ** attempt)
+            msg = f"Retry {attempt + 1}/{max_retries} after error: {e}. Waiting {delay}s..."
+            if log_callback:
+                log_callback(msg)
+            else:
+                print(msg, flush=True)
+            if attempt < max_retries - 1:
+                time.sleep(delay)
+            else:
+                raise
+
+
 META_ANALYSIS_KEYWORDS = [
     'meta-analysis',
     'meta analysis',
@@ -81,7 +99,12 @@ def fetch_papers(days_back: int = 7, max_results: int = 10000, progress_callback
         )
         
         try:
-            results = client.results(search)
+            results = retry_request(
+                lambda: client.results(search),
+                max_retries=3,
+                initial_delay=5,
+                log_callback=log_callback
+            )
             
             for result in results:
                 try:
