@@ -35,16 +35,22 @@ Desktop application for tracking AI research papers from arXiv and Hugging Face.
 - **Fetch by Month**: Retrieve papers from a specific month/year (e.g., February 2026)
 - **Network Resilience**: Automatic retry with exponential backoff on API failures (3 attempts per request)
 - **Statistics Dashboard**: Visual overview with text bar charts — papers by category, by month, top authors, and key metrics
-- **Automated Tests**: 121 tests covering Paper, Database, fetcher logic, and retry mechanisms
+- **AI Suggestions** *(requires [Ollama](https://ollama.com) running locally)*: Click **"🤖 AI Suggest"** to get personalized paper recommendations powered by a local LLM
+  - Describe your professional context (project, role, research question)
+  - The LLM extracts keywords from your context, scores all papers by keyword match, and analyses the top 100 candidates
+  - Each suggestion shows a keyword match score `[XX%]` and an LLM relevance score `[N/5]` — only papers scoring ≥ 4/5 are shown
+  - Clicking a suggested paper navigates directly to it in the main list
+  - Works with any Ollama model; `deepseek-r1:8b` is auto-selected when available
+- **Automated Tests**: 144 tests covering Paper, Database, fetcher logic, retry mechanisms, and Ollama client
 
 ## Screenshots
 
 The application features:
 - Left panel: Scrollable list of papers with star, dates and titles
 - Right panel: Detailed view with favorite toggle, abstract, authors, and links
-- Toolbar: Search, category filter, source filter, meta-analysis toggle, refresh button, fetch by month button
+- Toolbar: Search, category filter, source filter, meta-analysis toggle, refresh button, fetch by month button, Statistics button, AI Suggest button
 - Progress bar: Shows fetching progress
-- Log panel: Real-time logs displayed in the app footer
+- Log panel: Real-time logs displayed in the app footer (including AI suggestion progress)
 - Status bar: Displays current status and paper count
 
 ## Installation
@@ -53,6 +59,9 @@ The application features:
 
 - Python 3.8+ ([Download](https://www.python.org/downloads/))
   - Make sure to check **"Add Python to PATH"** during installation
+- *(Optional)* [Ollama](https://ollama.com) — required only for the AI Suggest feature
+  - Install Ollama and pull a model, e.g.: `ollama pull deepseek-r1:8b`
+  - Ollama must be running (`ollama serve`) before using AI Suggest
 
 ### Install
 
@@ -105,6 +114,7 @@ Or double-click `run.bat` on Windows (recommended - runs without opening termina
 | **Auto-refresh** | Check "Auto-refresh hourly" for automatic updates |
 | **Fetch by Month** | Click "📅 Fetch by month" to retrieve papers from a specific month/year |
 | **Statistics** | Click "📊 Statistics" to see dashboard with charts and metrics |
+| **AI Suggest** | Click "🤖 AI Suggest", describe your context, select a model, and click "Suggest" |
 
 ### Smart Fetch
 
@@ -119,21 +129,24 @@ Or double-click `run.bat` on Windows (recommended - runs without opening termina
 
 ```
 AI-Paper-Tracker/
-├── main.py                    # PySide6 GUI application + StatisticsDialog
-├── fetcher.py                # arXiv API integration
-├── huggingface_fetcher.py    # Hugging Face Papers API integration
-├── database.py               # SQLite database management
-├── models.py                 # Data models (Paper, Category, Database + stats queries)
-├── requirements.txt          # Python dependencies
-├── install.bat               # Windows installation script (creates venv, installs deps)
-├── run.bat                   # Windows launcher script (activates venv, runs app)
-├── README.md                 # This file
-├── papers.db                # Local database (created on first run)
-└── tests/                    # Automated test suite (121 tests)
-    ├── conftest.py           # Shared fixtures
-    ├── test_models.py        # Paper + Database tests
-    ├── test_fetcher.py       # Fetcher logic + retry tests
-    └── test_huggingface.py   # HF retry tests
+├── main.py                    # PySide6 GUI — MainWindow, FetchWorker, OllamaWorker,
+│                              #   AISearchDialog, StatisticsDialog, AutoRefreshWorker
+├── ollama_client.py           # Ollama REST API client (list_models, generate, extract_json)
+├── fetcher.py                 # arXiv API integration
+├── huggingface_fetcher.py     # Hugging Face Papers API integration
+├── database.py                # SQLite database management
+├── models.py                  # Data models (Paper, Category, Database + stats queries)
+├── requirements.txt           # Python dependencies
+├── install.bat                # Windows installation script (creates venv, installs deps)
+├── run.bat                    # Windows launcher script (activates venv, runs app)
+├── README.md                  # This file
+├── papers.db                  # Local database (created on first run)
+└── tests/                     # Automated test suite (144 tests)
+    ├── conftest.py            # Shared fixtures
+    ├── test_models.py         # Paper + Database tests
+    ├── test_fetcher.py        # Fetcher logic + retry tests
+    ├── test_huggingface.py    # HF retry tests
+    └── test_ollama_client.py  # OllamaClient tests (list_models, generate, extract_json)
 ```
 
 ## Requirements
@@ -142,6 +155,8 @@ AI-Paper-Tracker/
 - arxiv - arXiv API wrapper
 - PySide6 - Cross-platform GUI framework (LGPL licensed)
 - huggingface-hub - Hugging Face Hub Python library
+- requests - HTTP client (used by OllamaClient)
+- [Ollama](https://ollama.com) *(optional)* - Local LLM runtime for AI Suggest feature
 
 ## How It Works
 
@@ -157,6 +172,10 @@ AI-Paper-Tracker/
 5. **Storage**: All data stored locally in SQLite (papers.db)
 6. **Auto-refresh**: Uses background thread for hourly updates (works when app is minimized)
 7. **Network Resilience**: Automatic retry with exponential backoff (3 attempts, delays of 5s, 10s, 20s) on API failures
+8. **AI Suggestions**: 
+   - Phase 1 — keyword extraction: LLM extracts 5-10 domain-specific keywords from the user's context
+   - Phase 2 — keyword scoring: all papers are scored by how many keywords appear in title+abstract; top 100 are selected
+   - Phase 3 — LLM analysis: papers are sent to the LLM in batches of 20 with a strict prompt requesting JSON output `[{"id", "reason", "score"}]`; only papers scoring ≥ 4/5 are surfaced
 
 ## Filtering Examples
 
@@ -189,11 +208,12 @@ python main.py
 python -m pytest tests/ -v
 ```
 
-121 tests covering:
+144 tests covering:
 - **Paper class**: construction, defaults, to_dict conversion
 - **Database**: all CRUD methods, search filters, favorites, statistics queries
 - **Fetcher logic**: meta-analysis detection, category display, retry with exponential backoff
 - **HuggingFace**: retry mechanism
+- **OllamaClient**: list_models, generate, extract_json (including backtick stripping and `<think>` block handling)
 
 ### Adding New Categories
 
@@ -228,7 +248,8 @@ search_queries = ["machine learning", "deep learning", "neural network", ...]
 - **database.py**: SQLite operations (CRUD for papers)
 - **fetcher.py**: arXiv API integration
 - **huggingface_fetcher.py**: Hugging Face Papers API integration
-- **main.py**: PySide6 GUI application
+- **ollama_client.py**: Thin Ollama REST API client — keyword extraction, paper analysis, JSON parsing
+- **main.py**: PySide6 GUI application — MainWindow, FetchWorker, OllamaWorker, AISearchDialog, StatisticsDialog
 
 ## License
 

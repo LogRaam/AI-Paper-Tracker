@@ -1,6 +1,5 @@
 arxiv
 PySide6
 huggingface-hub
-tea-client==0.0.8
 pytest
 requests

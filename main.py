@@ -695,24 +695,13 @@ class AISearchDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _on_paper_clicked(self, url):
-        from PySide6.QtCore import QUrl
         arxiv_id = url.toString() if hasattr(url, 'toString') else str(url)
         paper = self._results.get(arxiv_id)
         if paper is None:
             return
 
-        # Put the title in the search box and trigger search
-        search_title = paper.title[:80]
-        self.main_window.search_box.setText(search_title)
-        self.main_window.on_search()
-
-        # Select the first matching item in the list
-        paper_list = self.main_window.paper_list
-        if paper_list.count() > 0:
-            first_item = paper_list.item(0)
-            if first_item:
-                paper_list.setCurrentItem(first_item)
-                self.main_window.on_paper_selected(first_item)
+        # Navigate main window directly to this paper by arxiv_id
+        self.main_window.select_paper_by_id(paper.arxiv_id)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -750,16 +739,21 @@ class AutoRefreshWorker(QThread):
     
     def run(self):
         import time
+        elapsed = 0
         while self.running:
-            time.sleep(self.interval_seconds)
-            if self.running:
+            time.sleep(1)
+            elapsed += 1
+            if not self.running:
+                break
+            if elapsed >= self.interval_seconds:
+                elapsed = 0
                 from PySide6.QtCore import QMetaObject, Qt
                 QMetaObject.invokeMethod(
                     self.main_window,
                     'start_fetch',
                     Qt.QueuedConnection
                 )
-    
+
     def stop(self):
         self.running = False
 
@@ -1022,6 +1016,34 @@ class MainWindow(QMainWindow):
             self.papers = self.db.get_all_papers()
         
         self.populate_list(self.papers)
+
+    def select_paper_by_id(self, arxiv_id: str):
+        """Select and display a paper in the list by its arxiv_id.
+
+        Searches the current list first; if not found, resets the search
+        filters and loads all papers before selecting.
+        """
+        paper_list = self.paper_list
+
+        def _find_and_select() -> bool:
+            for i in range(paper_list.count()):
+                item = paper_list.item(i)
+                if item and item.data(Qt.UserRole).arxiv_id == arxiv_id:
+                    paper_list.setCurrentItem(item)
+                    self.on_paper_selected(item)
+                    return True
+            return False
+
+        # Try current list first (no filter change)
+        if _find_and_select():
+            return
+
+        # Not visible — clear search and try again
+        self.search_box.blockSignals(True)
+        self.search_box.setText("")
+        self.search_box.blockSignals(False)
+        self.on_search()
+        _find_and_select()
 
     def toggle_favorite(self):
         if hasattr(self, 'current_paper') and self.current_paper:

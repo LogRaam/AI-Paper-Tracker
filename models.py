@@ -90,12 +90,12 @@ class Database:
         ''')
         try:
             cursor.execute('ALTER TABLE papers ADD COLUMN source TEXT DEFAULT "arXiv"')
-        except:
-            pass
+        except Exception:
+            pass  # Column already exists — safe to ignore
         try:
             cursor.execute('ALTER TABLE papers ADD COLUMN is_favorite INTEGER DEFAULT 0')
-        except:
-            pass
+        except Exception:
+            pass  # Column already exists — safe to ignore
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_published ON papers(published)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_categories ON papers(categories)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_source ON papers(source)')
