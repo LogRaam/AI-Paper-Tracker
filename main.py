@@ -553,8 +553,6 @@ class AISearchDialog(QDialog):
                 paper_list.setCurrentItem(first_item)
                 self.main_window.on_paper_selected(first_item)
 
-        self.close()
-
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
@@ -1045,8 +1043,11 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def show_ai_search(self):
-        dialog = AISearchDialog(self.db, main_window=self, parent=self)
-        dialog.exec()
+        if not hasattr(self, '_ai_dialog') or not self._ai_dialog.isVisible():
+            self._ai_dialog = AISearchDialog(self.db, main_window=self, parent=self)
+        self._ai_dialog.show()
+        self._ai_dialog.raise_()
+        self._ai_dialog.activateWindow()
 
     def log(self, message: str):
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
