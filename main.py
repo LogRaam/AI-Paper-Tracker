@@ -338,7 +338,7 @@ Keywords:"""
                     reason = str(item.get("reason", "")).strip()
                     score = int(item.get("score", 5))  # default to 5 for backward compatibility
 
-                    if score < 4:
+                    if score < 3:
                         continue
                     if not arxiv_id:
                         continue
@@ -410,7 +410,7 @@ Return ONLY a JSON array. Each element must have exactly three keys:
   "reason": one sentence explaining WHY this paper is relevant to the context
   "score": integer 1-5 where 5 = highly relevant, 1 = marginally relevant
 
-Only include papers with score >= 4. Lower scores will be filtered out.
+Only include papers with score >= 3. Lower scores will be filtered out.
 Do not include any text, explanation, or markdown outside the JSON array.
 
 JSON array:"""
@@ -630,6 +630,8 @@ class AISearchDialog(QDialog):
             score_color = "#4ec9b0"  # green/teal for highly relevant
         elif llm_score >= 4:
             score_color = "#dcdcaa"  # yellow for relevant
+        elif llm_score >= 3:
+            score_color = "#ce9178"  # orange for moderately relevant
         else:
             score_color = "#888888"  # gray fallback
 
