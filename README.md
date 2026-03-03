@@ -38,7 +38,7 @@ Desktop application for tracking AI research papers from arXiv and Hugging Face.
 - **AI Suggestions** *(requires [Ollama](https://ollama.com) running locally)*: Click **"🤖 AI Suggest"** to get personalized paper recommendations powered by a local LLM
   - Describe your professional context (project, role, research question)
   - The LLM extracts keywords from your context, scores all papers by keyword match, and analyses the top 100 candidates
-  - Each suggestion shows a keyword match score `[XX%]` and an LLM relevance score `[N/5]` — only papers scoring ≥ 4/5 are shown
+  - Each suggestion shows a keyword match score `[XX%]` and an LLM relevance score `[N/5]` — papers scoring ≥ 3/5 are shown (teal = 5/5, yellow = 4/5, orange = 3/5)
   - Clicking a suggested paper navigates directly to it in the main list
   - Works with any Ollama model; `deepseek-r1:8b` is auto-selected when available
 - **Automated Tests**: 144 tests covering Paper, Database, fetcher logic, retry mechanisms, and Ollama client
@@ -175,7 +175,7 @@ AI-Paper-Tracker/
 8. **AI Suggestions**: 
    - Phase 1 — keyword extraction: LLM extracts 5-10 domain-specific keywords from the user's context
    - Phase 2 — keyword scoring: all papers are scored by how many keywords appear in title+abstract; top 100 are selected
-   - Phase 3 — LLM analysis: papers are sent to the LLM in batches of 20 with a strict prompt requesting JSON output `[{"id", "reason", "score"}]`; only papers scoring ≥ 4/5 are surfaced
+   - Phase 3 — LLM analysis: papers are sent to the LLM in batches of 20 with a strict prompt requesting JSON output `[{"id", "reason", "score"}]`; only papers scoring ≥ 3/5 are surfaced
 
 ## Filtering Examples
 
