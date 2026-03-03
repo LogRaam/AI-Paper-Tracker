@@ -171,13 +171,84 @@ class OllamaWorker(QThread):
         self.context = context
         self.model = model
         self.db = db
+        self.keywords: list = []
+
+    def _extract_keywords(self) -> list:
+        """Extract 5-10 search keywords from the user context using LLM."""
+        from ollama_client import OllamaClient
+
+        prompt = f"""Extract 5-10 search keywords from this context for a paper database search.
+Return ONLY a JSON array of strings, nothing else. Use singular forms. Be specific.
+Context: {self.context}
+Keywords:"""
+
+        self.log.emit("Extracting search keywords from context...")
+        try:
+            raw = OllamaClient.generate(self.model, prompt, timeout=60)
+            # Try to extract JSON array from response
+            import json
+            import re
+            # Find JSON array in response
+            start = raw.find('[')
+            end = raw.rfind(']')
+            if start != -1 and end != -1 and end > start:
+                json_str = raw[start:end+1]
+                keywords = json.loads(json_str)
+                if isinstance(keywords, list):
+                    # Filter to strings and limit to 10
+                    keywords = [str(k).lower().strip() for k in keywords if isinstance(k, str)]
+                    keywords = keywords[:10]
+                    self.log.emit(f"Extracted keywords: {', '.join(keywords)}")
+                    return keywords
+            # Fallback: extract words manually
+            words = re.findall(r'"([^"]+)"', raw)
+            if words:
+                self.log.emit(f"Extracted keywords (fallback): {', '.join(words)}")
+                return [w.lower() for w in words[:10]]
+            self.log.emit("Warning: Could not extract keywords, using empty list")
+            return []
+        except Exception as e:
+            self.log.emit(f"Keyword extraction failed: {e}")
+            return []
+
+    def _keyword_match_score(self, paper, keywords: list) -> int:
+        """Calculate keyword match score (0-100%)."""
+        if not keywords:
+            return 0
+        text = f"{paper.title or ''} {paper.abstract or ''}".lower()
+        matches = sum(1 for kw in keywords if kw.lower() in text)
+        return int((matches / len(keywords)) * 100)
 
     def run(self):
         import traceback
         from ollama_client import OllamaClient, OllamaNotAvailableError
 
         try:
-            papers = self.db.get_all_papers()
+            # Step 1: Extract keywords from context
+            self.keywords = self._extract_keywords()
+            if not self.keywords:
+                self.log.emit("No keywords extracted. Using all papers.")
+                papers = self.db.get_all_papers()
+            else:
+                # Step 2: Calculate keyword match scores for all papers
+                self.log.emit("Calculating keyword match scores...")
+                all_papers = self.db.get_all_papers()
+                scored_papers = []
+                for p in all_papers:
+                    kw_score = self._keyword_match_score(p, self.keywords)
+                    scored_papers.append((kw_score, p))
+                
+                # Sort by keyword score descending, then by date
+                scored_papers.sort(key=lambda x: (-x[0], x[1].published or ""))
+                
+                # Take top 100 papers
+                papers = [p for _, p in scored_papers[:100]]
+                self.log.emit(
+                    f"Filtered to top 100 papers by keyword match. "
+                    f"Keyword scores range: {scored_papers[0][0] if scored_papers else 0}% - "
+                    f"{scored_papers[-1][0] if scored_papers else 0}%"
+                )
+
             if not papers:
                 self.log.emit("No papers in database.")
                 self.finished.emit(0)
@@ -191,7 +262,7 @@ class OllamaWorker(QThread):
             total_batches = len(batches)
             self.log.emit(
                 f"Starting AI analysis: {total_papers} papers in "
-                f"{total_batches} batches of {self.BATCH_SIZE}..."
+                f"{total_batches} batch(es)..."
             )
 
             seen_ids: set = set()
@@ -202,7 +273,7 @@ class OllamaWorker(QThread):
                     self.log.emit("Analysis stopped by user.")
                     break
 
-                pct = int((batch_idx / total_batches) * 100)
+                pct = int((batch_idx / total_batches) * 100) if total_batches > 0 else 100
                 msg = f"Analysing batch {batch_idx + 1}/{total_batches}..."
                 self.progress.emit(pct, msg)
 
@@ -235,11 +306,12 @@ class OllamaWorker(QThread):
                     paper = paper_map.get(arxiv_id)
                     if paper is None:
                         continue
+                    kw_score = self._keyword_match_score(paper, self.keywords)
                     seen_ids.add(arxiv_id)
                     total_found += 1
-                    self.result.emit({"paper": paper, "reason": reason, "score": score})
+                    self.result.emit({"paper": paper, "reason": reason, "score": score, "kw_score": kw_score})
                     self.log.emit(
-                        f"Found [{score}/5]: {paper.title[:50]}..."
+                        f"Found [{kw_score}% | {score}/5]: {paper.title[:40]}..."
                     )
 
             self.progress.emit(100, "Analysis complete.")
@@ -260,14 +332,20 @@ class OllamaWorker(QThread):
                 "\n", " "
             )
             title = (p.title or "").replace("\n", " ")
-            lines.append(f"{p.arxiv_id} | {title} | {abstract_snip}")
+            kw_score = self._keyword_match_score(p, self.keywords)
+            lines.append(f"{p.arxiv_id} | {title} | kw:{kw_score}% | {abstract_snip}")
 
         papers_block = "\n".join(lines)
+
+        keywords_str = ", ".join(self.keywords) if self.keywords else "none"
 
         return f"""You are a strict research paper recommender.
 
 CONTEXT:
 {self.context}
+
+KEYWORDS EXTRACTED: {keywords_str}
+These keywords were extracted from the context above.
 
 INSTRUCTIONS:
 - Only suggest papers that DIRECTLY address the context
@@ -276,8 +354,10 @@ INSTRUCTIONS:
 - If NO papers are relevant in this batch, return [] exactly
 - Do NOT suggest papers just because they contain generic AI/ML keywords
 
-PAPERS (one per line — format: ARXIV_ID | Title | Abstract excerpt):
+PAPERS (one per line — format: ARXIV_ID | Title | kw:XX% | Abstract excerpt):
 {papers_block}
+
+The "kw:XX%" shows the keyword match percentage for each paper (0-100%).
 
 Return ONLY a JSON array. Each element must have exactly three keys:
   "id": the ARXIV_ID string (copy exactly as shown)
@@ -493,18 +573,27 @@ class AISearchDialog(QDialog):
     def _on_result(self, item: dict):
         paper = item["paper"]
         reason = item["reason"]
-        score = item.get("score", 5)
+        llm_score = item.get("score", 5)
+        kw_score = item.get("kw_score", 0)
 
         self._results[paper.arxiv_id] = paper
         self._found_count += 1
 
-        # Color based on score
-        if score >= 5:
+        # Color based on LLM score
+        if llm_score >= 5:
             score_color = "#4ec9b0"  # green/teal for highly relevant
-        elif score >= 4:
+        elif llm_score >= 4:
             score_color = "#dcdcaa"  # yellow for relevant
         else:
             score_color = "#888888"  # gray fallback
+
+        # Keyword score color
+        if kw_score >= 80:
+            kw_color = "#4ec9b0"
+        elif kw_score >= 50:
+            kw_color = "#dcdcaa"
+        else:
+            kw_color = "#888888"
 
         date = paper.published[:10] if paper.published else ""
         cats = paper.categories[:40] if paper.categories else ""
@@ -514,8 +603,10 @@ class AISearchDialog(QDialog):
             f'<a href="{paper.arxiv_id}" style="color:#569cd6; font-weight:bold; '
             f'font-size:13px; text-decoration:none;">'
             f'{self._found_count}. {paper.title}</a>'
+            f' <span style="color:{kw_color}; font-size:11px;">'
+            f'[{kw_score}%]</span>'
             f' <span style="color:{score_color}; font-size:11px; font-weight:bold;">'
-            f'[{score}/5]</span><br>'
+            f'[{llm_score}/5]</span><br>'
             f'<span style="color:#888; font-size:11px">'
             f'{paper.source} &nbsp;·&nbsp; {date} &nbsp;·&nbsp; {cats}</span><br>'
             f'<span style="color:#4ec9b0; font-size:12px">&#9654; {reason}</span>'
