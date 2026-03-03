@@ -226,6 +226,10 @@ class OllamaWorker(QThread):
                 for item in suggestions:
                     arxiv_id = str(item.get("id", "")).strip()
                     reason = str(item.get("reason", "")).strip()
+                    score = int(item.get("score", 5))  # default to 5 for backward compatibility
+
+                    if score < 4:
+                        continue
                     if not arxiv_id or arxiv_id in seen_ids:
                         continue
                     paper = paper_map.get(arxiv_id)
@@ -233,9 +237,9 @@ class OllamaWorker(QThread):
                         continue
                     seen_ids.add(arxiv_id)
                     total_found += 1
-                    self.result.emit({"paper": paper, "reason": reason})
+                    self.result.emit({"paper": paper, "reason": reason, "score": score})
                     self.log.emit(
-                        f"Found: {paper.title[:60]}..."
+                        f"Found [{score}/5]: {paper.title[:50]}..."
                     )
 
             self.progress.emit(100, "Analysis complete.")
@@ -260,20 +264,27 @@ class OllamaWorker(QThread):
 
         papers_block = "\n".join(lines)
 
-        return f"""You are a research paper recommender. A user described their professional context below.
-From the list of papers provided, identify those most relevant to the context.
+        return f"""You are a strict research paper recommender.
 
 CONTEXT:
 {self.context}
 
+INSTRUCTIONS:
+- Only suggest papers that DIRECTLY address the context
+- Reject papers that only contain matching keywords but are NOT actually relevant
+- Each paper must have a clear, substantive connection to the context
+- If NO papers are relevant in this batch, return [] exactly
+- Do NOT suggest papers just because they contain generic AI/ML keywords
+
 PAPERS (one per line — format: ARXIV_ID | Title | Abstract excerpt):
 {papers_block}
 
-Return ONLY a JSON array. Each element must have exactly two keys:
+Return ONLY a JSON array. Each element must have exactly three keys:
   "id": the ARXIV_ID string (copy exactly as shown)
-  "reason": one sentence explaining why this paper is relevant to the context
+  "reason": one sentence explaining WHY this paper is relevant to the context
+  "score": integer 1-5 where 5 = highly relevant, 1 = marginally relevant
 
-If no papers in this batch are relevant, return an empty array: []
+Only include papers with score >= 4. Lower scores will be filtered out.
 Do not include any text, explanation, or markdown outside the JSON array.
 
 JSON array:"""
@@ -480,9 +491,18 @@ class AISearchDialog(QDialog):
     def _on_result(self, item: dict):
         paper = item["paper"]
         reason = item["reason"]
+        score = item.get("score", 5)
 
         self._results[paper.arxiv_id] = paper
         self._found_count += 1
+
+        # Color based on score
+        if score >= 5:
+            score_color = "#4ec9b0"  # green/teal for highly relevant
+        elif score >= 4:
+            score_color = "#dcdcaa"  # yellow for relevant
+        else:
+            score_color = "#888888"  # gray fallback
 
         date = paper.published[:10] if paper.published else ""
         cats = paper.categories[:40] if paper.categories else ""
@@ -491,7 +511,9 @@ class AISearchDialog(QDialog):
             f'<div style="border-bottom:1px solid #333; padding:10px 0;">'
             f'<a href="{paper.arxiv_id}" style="color:#569cd6; font-weight:bold; '
             f'font-size:13px; text-decoration:none;">'
-            f'{self._found_count}. {paper.title}</a><br>'
+            f'{self._found_count}. {paper.title}</a>'
+            f' <span style="color:{score_color}; font-size:11px; font-weight:bold;">'
+            f'[{score}/5]</span><br>'
             f'<span style="color:#888; font-size:11px">'
             f'{paper.source} &nbsp;·&nbsp; {date} &nbsp;·&nbsp; {cats}</span><br>'
             f'<span style="color:#4ec9b0; font-size:12px">&#9654; {reason}</span>'
