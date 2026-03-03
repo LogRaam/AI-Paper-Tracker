@@ -257,4 +257,4 @@ MIT License - Feel free to use and modify for personal or commercial projects.
 
 ## Author
 
-Developed with Python and PySide6
+**Gabriel Mailhot** — Original Author
