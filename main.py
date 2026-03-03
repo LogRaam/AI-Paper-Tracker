@@ -423,10 +423,12 @@ class AISearchDialog(QDialog):
                 return
             for m in models:
                 self.model_combo.addItem(m)
-            # Pre-select qwen3:8b if available
-            idx = self.model_combo.findText("qwen3:8b")
-            if idx >= 0:
-                self.model_combo.setCurrentIndex(idx)
+            # Pre-select best reasoning model: deepseek-r1:8b > qwen3:8b
+            for preferred in ["deepseek-r1:8b", "qwen3:8b", "llama3:8b", "mistral:7b"]:
+                idx = self.model_combo.findText(preferred)
+                if idx >= 0:
+                    self.model_combo.setCurrentIndex(idx)
+                    break
         except OllamaNotAvailableError as e:
             self._show_message(
                 f"<b style='color:#f44747'>Ollama not available</b><br><br>"
