@@ -175,6 +175,8 @@ class OllamaWorker(QThread):
 
     def _extract_keywords(self) -> list:
         """Extract 5-10 search keywords from the user context using LLM."""
+        import json
+        import re
         from ollama_client import OllamaClient
 
         prompt = f"""Extract 5-10 search keywords from this context for a paper database search.
@@ -185,26 +187,45 @@ Keywords:"""
         self.log.emit("Extracting search keywords from context...")
         try:
             raw = OllamaClient.generate(self.model, prompt, timeout=60)
+
+            # Strip <thinking> blocks that some models add
+            clean_raw = re.sub(r'<thinking>.*?</thinking>', '', raw, flags=re.DOTALL)
+            clean_raw = re.sub(r'<think>.*?</think>', '', clean_raw, flags=re.DOTALL)
+
             # Try to extract JSON array from response
-            import json
-            import re
-            # Find JSON array in response
-            start = raw.find('[')
-            end = raw.rfind(']')
+            start = clean_raw.find('[')
+            end = clean_raw.rfind(']')
             if start != -1 and end != -1 and end > start:
-                json_str = raw[start:end+1]
+                json_str = clean_raw[start:end+1]
                 keywords = json.loads(json_str)
                 if isinstance(keywords, list):
                     # Filter to strings and limit to 10
                     keywords = [str(k).lower().strip() for k in keywords if isinstance(k, str)]
                     keywords = keywords[:10]
-                    self.log.emit(f"Extracted keywords: {', '.join(keywords)}")
-                    return keywords
-            # Fallback: extract words manually
+                    if keywords:
+                        self.log.emit(f"Extracted keywords: {', '.join(keywords)}")
+                        return keywords
+
+            # Fallback: extract words manually from raw response
             words = re.findall(r'"([^"]+)"', raw)
             if words:
-                self.log.emit(f"Extracted keywords (fallback): {', '.join(words)}")
-                return [w.lower() for w in words[:10]]
+                # Filter common non-keyword responses
+                words = [w for w in words if len(w) > 2 and w.lower() not in 
+                        ['context', 'keywords', 'extract', 'search', 'return', 'here', 'some', 'these']]
+                if words:
+                    self.log.emit(f"Extracted keywords (fallback): {', '.join(words[:10])}")
+                    return [w.lower() for w in words[:10]]
+
+            # Last resort: extract significant words from context
+            context_words = re.findall(r'\b[a-z]{4,}\b', self.context.lower())
+            # Filter common words
+            stopwords = {'need', 'want', 'looking', 'searching', 'find', 'have', 'with', 'that', 'this', 'from', 'which', 'would', 'could', 'should', 'about', 'into', 'using', 'paper', 'papers', 'research'}
+            context_words = [w for w in context_words if w not in stopwords]
+            if context_words:
+                unique_words = list(dict.fromkeys(context_words))[:10]
+                self.log.emit(f"Extracted keywords (from context): {', '.join(unique_words)}")
+                return unique_words
+
             self.log.emit("Warning: Could not extract keywords, using empty list")
             return []
         except Exception as e:
