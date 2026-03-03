@@ -150,6 +150,438 @@ class StatisticsDialog(QDialog):
         return html
 
 
+# ============================================================
+# Ollama AI suggestion worker
+# ============================================================
+
+class OllamaWorker(QThread):
+    """Background thread that queries Ollama in batches and emits suggestions."""
+
+    progress = Signal(int, str)   # (pct, message)
+    result   = Signal(dict)       # {"paper": Paper, "reason": str}
+    finished = Signal(int)        # total suggestions found
+    error    = Signal(str)
+    log      = Signal(str)
+
+    BATCH_SIZE = 100
+    ABSTRACT_MAX = 300
+
+    def __init__(self, context: str, model: str, db):
+        super().__init__()
+        self.context = context
+        self.model = model
+        self.db = db
+
+    def run(self):
+        import traceback
+        from ollama_client import OllamaClient, OllamaNotAvailableError
+
+        try:
+            papers = self.db.get_all_papers()
+            if not papers:
+                self.log.emit("No papers in database.")
+                self.finished.emit(0)
+                return
+
+            total_papers = len(papers)
+            batches = [
+                papers[i:i + self.BATCH_SIZE]
+                for i in range(0, total_papers, self.BATCH_SIZE)
+            ]
+            total_batches = len(batches)
+            self.log.emit(
+                f"Starting AI analysis: {total_papers} papers in "
+                f"{total_batches} batches of {self.BATCH_SIZE}..."
+            )
+
+            seen_ids: set = set()
+            total_found = 0
+
+            for batch_idx, batch in enumerate(batches):
+                if self.isInterruptionRequested():
+                    self.log.emit("Analysis stopped by user.")
+                    break
+
+                pct = int((batch_idx / total_batches) * 100)
+                msg = f"Analysing batch {batch_idx + 1}/{total_batches}..."
+                self.progress.emit(pct, msg)
+
+                prompt = self._build_prompt(batch)
+
+                try:
+                    raw = OllamaClient.generate(
+                        self.model, prompt, timeout=180
+                    )
+                    suggestions = OllamaClient.extract_json(raw)
+                except OllamaNotAvailableError as e:
+                    self.error.emit(str(e))
+                    return
+                except Exception as e:
+                    self.log.emit(f"Batch {batch_idx + 1} error: {e}")
+                    continue
+
+                # Map arxiv_id -> Paper for this batch
+                paper_map = {p.arxiv_id: p for p in batch}
+
+                for item in suggestions:
+                    arxiv_id = str(item.get("id", "")).strip()
+                    reason = str(item.get("reason", "")).strip()
+                    if not arxiv_id or arxiv_id in seen_ids:
+                        continue
+                    paper = paper_map.get(arxiv_id)
+                    if paper is None:
+                        continue
+                    seen_ids.add(arxiv_id)
+                    total_found += 1
+                    self.result.emit({"paper": paper, "reason": reason})
+                    self.log.emit(
+                        f"Found: {paper.title[:60]}..."
+                    )
+
+            self.progress.emit(100, "Analysis complete.")
+            self.log.emit(
+                f"AI analysis complete — {total_found} suggestions found."
+            )
+            self.finished.emit(total_found)
+
+        except Exception as e:
+            tb = traceback.format_exc()
+            self.log.emit(f"ERROR: {e}\n{tb}")
+            self.error.emit(str(e))
+
+    def _build_prompt(self, batch) -> str:
+        lines = []
+        for p in batch:
+            abstract_snip = (p.abstract or "")[:self.ABSTRACT_MAX].replace(
+                "\n", " "
+            )
+            title = (p.title or "").replace("\n", " ")
+            lines.append(f"{p.arxiv_id} | {title} | {abstract_snip}")
+
+        papers_block = "\n".join(lines)
+
+        return f"""You are a research paper recommender. A user described their professional context below.
+From the list of papers provided, identify those most relevant to the context.
+
+CONTEXT:
+{self.context}
+
+PAPERS (one per line — format: ARXIV_ID | Title | Abstract excerpt):
+{papers_block}
+
+Return ONLY a JSON array. Each element must have exactly two keys:
+  "id": the ARXIV_ID string (copy exactly as shown)
+  "reason": one sentence explaining why this paper is relevant to the context
+
+If no papers in this batch are relevant, return an empty array: []
+Do not include any text, explanation, or markdown outside the JSON array.
+
+JSON array:"""
+
+
+# ============================================================
+# AI Search Dialog
+# ============================================================
+
+class AISearchDialog(QDialog):
+    """Popup for AI-powered paper suggestions using Ollama."""
+
+    def __init__(self, db, main_window, parent=None):
+        super().__init__(parent)
+        self.db = db
+        self.main_window = main_window
+        self.worker = None
+        self._results: dict = {}   # arxiv_id -> Paper
+
+        self.setWindowTitle("🤖 AI Paper Suggestions")
+        self.setMinimumSize(750, 650)
+        self.setStyleSheet("QDialog { background-color: #1e1e1e; color: #d4d4d4; }")
+
+        self._build_ui()
+        self._check_ollama()
+
+    # ------------------------------------------------------------------
+    # UI construction
+    # ------------------------------------------------------------------
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(8)
+
+        # -- Context input --
+        ctx_label = QLabel("Describe your professional context:")
+        ctx_label.setStyleSheet("color: #9cdcfe; font-weight: bold;")
+        layout.addWidget(ctx_label)
+
+        self.context_edit = QPlainTextEdit()
+        self.context_edit.setPlaceholderText(
+            "e.g. I work at a financial company that is starting to agentize "
+            "the development practices of an IT department..."
+        )
+        self.context_edit.setFixedHeight(110)
+        self.context_edit.setStyleSheet(
+            "QPlainTextEdit { background-color: #252526; color: #d4d4d4; "
+            "border: 1px solid #444; padding: 4px; }"
+        )
+        layout.addWidget(self.context_edit)
+
+        # -- Controls row --
+        ctrl_row = QHBoxLayout()
+
+        model_label = QLabel("Model:")
+        model_label.setStyleSheet("color: #888;")
+        ctrl_row.addWidget(model_label)
+
+        self.model_combo = QComboBox()
+        self.model_combo.setStyleSheet(
+            "QComboBox { background-color: #252526; color: #d4d4d4; "
+            "border: 1px solid #444; padding: 3px 8px; }"
+        )
+        self.model_combo.setMinimumWidth(160)
+        ctrl_row.addWidget(self.model_combo)
+
+        ctrl_row.addSpacing(12)
+
+        self.suggest_btn = QPushButton("🤖 Suggest")
+        self.suggest_btn.setStyleSheet(
+            "QPushButton { background-color: #0e639c; color: white; "
+            "padding: 6px 16px; border: none; font-weight: bold; } "
+            "QPushButton:hover { background-color: #1177bb; } "
+            "QPushButton:disabled { background-color: #333; color: #666; }"
+        )
+        self.suggest_btn.clicked.connect(self._start_suggest)
+        ctrl_row.addWidget(self.suggest_btn)
+
+        self.stop_btn = QPushButton("⏹ Stop")
+        self.stop_btn.setEnabled(False)
+        self.stop_btn.setStyleSheet(
+            "QPushButton { background-color: #6b2121; color: #d4d4d4; "
+            "padding: 6px 16px; border: none; } "
+            "QPushButton:hover { background-color: #8b2e2e; } "
+            "QPushButton:disabled { background-color: #333; color: #666; }"
+        )
+        self.stop_btn.clicked.connect(self._stop_suggest)
+        ctrl_row.addWidget(self.stop_btn)
+
+        ctrl_row.addStretch()
+        layout.addLayout(ctrl_row)
+
+        # -- Progress bar --
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        self.progress_bar.setStyleSheet(
+            "QProgressBar { background-color: #252526; border: 1px solid #444; "
+            "color: #d4d4d4; text-align: center; } "
+            "QProgressBar::chunk { background-color: #0e639c; }"
+        )
+        layout.addWidget(self.progress_bar)
+
+        # -- Results browser --
+        self.browser = QTextBrowser()
+        self.browser.setStyleSheet(
+            "QTextBrowser { background-color: #1e1e1e; color: #d4d4d4; border: none; }"
+        )
+        self.browser.setOpenLinks(False)
+        self.browser.anchorClicked.connect(self._on_paper_clicked)
+        layout.addWidget(self.browser)
+
+        # -- Close button --
+        close_btn = QPushButton("Close")
+        close_btn.setStyleSheet(
+            "QPushButton { background-color: #333; color: #d4d4d4; "
+            "padding: 6px 20px; border: 1px solid #555; }"
+        )
+        close_btn.clicked.connect(self.close)
+        layout.addWidget(close_btn)
+
+    # ------------------------------------------------------------------
+    # Ollama availability check
+    # ------------------------------------------------------------------
+
+    def _check_ollama(self):
+        from ollama_client import OllamaClient, OllamaNotAvailableError
+        try:
+            models = OllamaClient.list_models()
+            if not models:
+                self._show_message(
+                    "<b style='color:#f0c674'>No models found.</b><br>"
+                    "Pull a model first:<br>"
+                    "<code style='color:#4ec9b0'>ollama pull qwen3:8b</code>"
+                )
+                self.suggest_btn.setEnabled(False)
+                return
+            for m in models:
+                self.model_combo.addItem(m)
+            # Pre-select qwen3:8b if available
+            idx = self.model_combo.findText("qwen3:8b")
+            if idx >= 0:
+                self.model_combo.setCurrentIndex(idx)
+        except OllamaNotAvailableError as e:
+            self._show_message(
+                f"<b style='color:#f44747'>Ollama not available</b><br><br>"
+                f"{e}<br><br>"
+                f"<b>Install Ollama:</b> "
+                f"<a href='https://ollama.com' style='color:#569cd6'>https://ollama.com</a><br>"
+                f"<b>Then pull a model:</b><br>"
+                f"<code style='color:#4ec9b0'>ollama pull qwen3:8b</code>"
+            )
+            self.suggest_btn.setEnabled(False)
+
+    # ------------------------------------------------------------------
+    # Suggest / Stop
+    # ------------------------------------------------------------------
+
+    def _start_suggest(self):
+        context = self.context_edit.toPlainText().strip()
+        if not context:
+            self._show_message(
+                "<span style='color:#f0c674'>Please describe your context first.</span>"
+            )
+            return
+
+        model = self.model_combo.currentText()
+        if not model:
+            return
+
+        # Reset state
+        self._results.clear()
+        self.browser.setHtml(
+            "<p style='color:#888'>Analysing papers... results will appear here as they are found.</p>"
+        )
+        self._result_html_parts = []
+        self._found_count = 0
+
+        self.suggest_btn.setEnabled(False)
+        self.stop_btn.setEnabled(True)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+
+        self.worker = OllamaWorker(context=context, model=model, db=self.db)
+        self.worker.progress.connect(self._on_progress)
+        self.worker.result.connect(self._on_result)
+        self.worker.finished.connect(self._on_finished)
+        self.worker.error.connect(self._on_error)
+        self.worker.log.connect(lambda msg: None)   # discard verbose logs
+        self.worker.start()
+
+    def _stop_suggest(self):
+        if self.worker and self.worker.isRunning():
+            self.worker.requestInterruption()
+            self.stop_btn.setEnabled(False)
+
+    # ------------------------------------------------------------------
+    # Worker signal handlers
+    # ------------------------------------------------------------------
+
+    def _on_progress(self, pct: int, msg: str):
+        self.progress_bar.setValue(pct)
+        self.progress_bar.setFormat(f"{msg} ({pct}%)")
+
+    def _on_result(self, item: dict):
+        paper = item["paper"]
+        reason = item["reason"]
+
+        self._results[paper.arxiv_id] = paper
+        self._found_count += 1
+
+        date = paper.published[:10] if paper.published else ""
+        cats = paper.categories[:40] if paper.categories else ""
+
+        block = (
+            f'<div style="border-bottom:1px solid #333; padding:10px 0;">'
+            f'<a href="{paper.arxiv_id}" style="color:#569cd6; font-weight:bold; '
+            f'font-size:13px; text-decoration:none;">'
+            f'{self._found_count}. {paper.title}</a><br>'
+            f'<span style="color:#888; font-size:11px">'
+            f'{paper.source} &nbsp;·&nbsp; {date} &nbsp;·&nbsp; {cats}</span><br>'
+            f'<span style="color:#4ec9b0; font-size:12px">&#9654; {reason}</span>'
+            f'</div>'
+        )
+        self._result_html_parts.append(block)
+        self._refresh_browser()
+
+    def _on_finished(self, total: int):
+        self.suggest_btn.setEnabled(True)
+        self.stop_btn.setEnabled(False)
+        self.progress_bar.setVisible(False)
+
+        if total == 0:
+            self._show_message(
+                "<span style='color:#f0c674'>No relevant papers found.<br>"
+                "Try rephrasing your context or use a different model.</span>"
+            )
+        else:
+            # Prepend summary header to results
+            header = (
+                f"<h3 style='color:#569cd6'>"
+                f"Found {total} relevant paper{'s' if total != 1 else ''}</h3>"
+                f"<p style='color:#888; font-size:11px'>"
+                f"Click a paper title to open it in the main window.</p>"
+            )
+            self._result_html_parts.insert(0, header)
+            self._refresh_browser()
+
+    def _on_error(self, msg: str):
+        self.suggest_btn.setEnabled(True)
+        self.stop_btn.setEnabled(False)
+        self.progress_bar.setVisible(False)
+        self._show_message(
+            f"<b style='color:#f44747'>Error:</b><br>{msg}"
+        )
+
+    # ------------------------------------------------------------------
+    # Paper click — open in main window
+    # ------------------------------------------------------------------
+
+    def _on_paper_clicked(self, url):
+        from PySide6.QtCore import QUrl
+        arxiv_id = url.toString() if hasattr(url, 'toString') else str(url)
+        paper = self._results.get(arxiv_id)
+        if paper is None:
+            return
+
+        # Put the title in the search box and trigger search
+        search_title = paper.title[:80]
+        self.main_window.search_box.setText(search_title)
+        self.main_window.on_search()
+
+        # Select the first matching item in the list
+        paper_list = self.main_window.paper_list
+        if paper_list.count() > 0:
+            first_item = paper_list.item(0)
+            if first_item:
+                paper_list.setCurrentItem(first_item)
+                self.main_window.on_paper_selected(first_item)
+
+        self.close()
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _show_message(self, html: str):
+        self.browser.setHtml(
+            f"<div style='font-family:Consolas,monospace; "
+            f"color:#d4d4d4; padding:16px;'>{html}</div>"
+        )
+
+    def _refresh_browser(self):
+        full_html = (
+            "<html><body style='font-family:Consolas,monospace; "
+            "background:#1e1e1e; color:#d4d4d4; padding:8px;'>"
+            + "".join(self._result_html_parts)
+            + "</body></html>"
+        )
+        self.browser.setHtml(full_html)
+
+    def closeEvent(self, event):
+        """Stop worker if running when dialog is closed."""
+        if self.worker and self.worker.isRunning():
+            self.worker.requestInterruption()
+            self.worker.wait(2000)
+        super().closeEvent(event)
+
+
 class AutoRefreshWorker(QThread):
     def __init__(self, main_window, interval_hours=1):
         super().__init__()
@@ -332,6 +764,10 @@ class MainWindow(QMainWindow):
         self.stats_btn = QPushButton("📊 Statistics")
         self.stats_btn.clicked.connect(self.show_statistics)
         toolbar.addWidget(self.stats_btn)
+
+        self.ai_suggest_btn = QPushButton("🤖 AI Suggest")
+        self.ai_suggest_btn.clicked.connect(self.show_ai_search)
+        toolbar.addWidget(self.ai_suggest_btn)
         
         self.auto_refresh_checkbox = QCheckBox("Auto-refresh hourly")
         self.auto_refresh_checkbox.stateChanged.connect(self.toggle_auto_refresh)
@@ -606,6 +1042,10 @@ class MainWindow(QMainWindow):
 
     def show_statistics(self):
         dialog = StatisticsDialog(self.db, parent=self)
+        dialog.exec()
+
+    def show_ai_search(self):
+        dialog = AISearchDialog(self.db, main_window=self, parent=self)
         dialog.exec()
 
     def log(self, message: str):
