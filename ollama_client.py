@@ -102,13 +102,23 @@ class OllamaClient:
     def extract_json(text: str) -> List[dict]:
         """Robustly extract a JSON array from model output.
 
-        The model sometimes adds preamble text before the JSON array.
-        This method finds the first '[' and last ']' and parses between them.
+        Handles:
+        - Markdown code blocks (```json ... ```)
+        - <think>/<thinking> blocks (deepseek-r1 style)
+        - Preamble text before the JSON array
 
         Returns:
             Parsed list of dicts, or [] if parsing fails.
         """
         try:
+            # Strip markdown code blocks (```json ... ``` or ``` ... ```)
+            text = re.sub(r'```(?:json)?\s*', '', text)
+            text = re.sub(r'```', '', text)
+
+            # Strip <think> and <thinking> blocks
+            text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+            text = re.sub(r'<thinking>.*?</thinking>', '', text, flags=re.DOTALL)
+
             # Find outermost JSON array
             start = text.find('[')
             end = text.rfind(']')

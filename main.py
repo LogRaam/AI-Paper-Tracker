@@ -324,7 +324,13 @@ Keywords:"""
                     continue
 
                 # Map arxiv_id -> Paper for this batch
-                paper_map = {p.arxiv_id: p for p in batch}
+                # Include both original and vX-stripped IDs for robust lookup
+                import re as _re
+                paper_map = {}
+                for p in batch:
+                    paper_map[p.arxiv_id] = p
+                    clean = _re.sub(r'v\d+$', '', p.arxiv_id)
+                    paper_map[clean] = p
 
                 for item in suggestions:
                     arxiv_id = str(item.get("id", "")).strip()
@@ -333,13 +339,20 @@ Keywords:"""
 
                     if score < 4:
                         continue
-                    if not arxiv_id or arxiv_id in seen_ids:
+                    if not arxiv_id:
                         continue
+                    # Normalize: try original ID, then strip vX suffix
                     paper = paper_map.get(arxiv_id)
                     if paper is None:
+                        arxiv_id_clean = _re.sub(r'v\d+$', '', arxiv_id)
+                        paper = paper_map.get(arxiv_id_clean)
+                    if paper is None:
+                        continue
+                    # Use the paper's own arxiv_id for dedup tracking
+                    if paper.arxiv_id in seen_ids:
                         continue
                     kw_score = self._keyword_match_score(paper, self.keywords)
-                    seen_ids.add(arxiv_id)
+                    seen_ids.add(paper.arxiv_id)
                     total_found += 1
                     self.result.emit({"paper": paper, "reason": reason, "score": score, "kw_score": kw_score})
                     self.log.emit(
