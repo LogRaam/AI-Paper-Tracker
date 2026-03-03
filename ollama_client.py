@@ -76,7 +76,7 @@ class OllamaClient:
             "stream": False,
             "options": {
                 "temperature": 0.1,   # Low temperature for consistent JSON output
-                "num_predict": 1024,
+                "num_predict": 4096,  # Enough for thinking blocks + JSON output
             }
         }
         try:

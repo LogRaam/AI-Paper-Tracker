@@ -163,8 +163,8 @@ class OllamaWorker(QThread):
     error    = Signal(str)
     log      = Signal(str)
 
-    BATCH_SIZE = 100
-    ABSTRACT_MAX = 300
+    BATCH_SIZE = 20
+    ABSTRACT_MAX = 200
 
     def __init__(self, context: str, model: str, db):
         super().__init__()
@@ -310,10 +310,11 @@ Keywords:"""
                 prompt = self._build_prompt(batch)
 
                 try:
+                    self.log.emit(f"Prompt length: {len(prompt)} chars")
                     raw = OllamaClient.generate(
                         self.model, prompt, timeout=180
                     )
-                    self.log.emit(f"Raw LLM response (first 300): {raw[:300]}")
+                    self.log.emit(f"Raw LLM response (first 500): {raw[:500]}")
                     suggestions = OllamaClient.extract_json(raw)
                     self.log.emit(f"Parsed {len(suggestions)} suggestion(s) from batch {batch_idx + 1}")
                 except OllamaNotAvailableError as e:
