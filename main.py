@@ -187,6 +187,7 @@ Keywords:"""
         self.log.emit("Extracting search keywords from context...")
         try:
             raw = OllamaClient.generate(self.model, prompt, timeout=60)
+            self.log.emit(f"Keyword extraction raw (first 300): {raw[:300]}")
 
             # Strip <thinking> blocks that some models add
             clean_raw = re.sub(r'<thinking>.*?</thinking>', '', raw, flags=re.DOTALL)
@@ -262,13 +263,21 @@ Keywords:"""
                 # Sort by keyword score descending, then by date
                 scored_papers.sort(key=lambda x: (-x[0], x[1].published or ""))
                 
-                # Take top 100 papers
-                papers = [p for _, p in scored_papers[:100]]
+                # Take top 100 papers (only those with at least 1 keyword match)
+                matching = [(s, p) for s, p in scored_papers if s > 0]
+                papers = [p for _, p in matching[:100]]
+                top_scores = [s for s, _ in scored_papers[:10]]
                 self.log.emit(
-                    f"Filtered to top 100 papers by keyword match. "
-                    f"Keyword scores range: {scored_papers[0][0] if scored_papers else 0}% - "
-                    f"{scored_papers[-1][0] if scored_papers else 0}%"
+                    f"Keyword match: {len(matching)} papers matched at least 1 keyword "
+                    f"(top 10 scores: {top_scores})"
                 )
+                if not papers:
+                    self.log.emit(
+                        "No papers matched any keyword. "
+                        "Keywords may not be in the database. "
+                        "Using top 50 most recent papers instead."
+                    )
+                    papers = [p for _, p in scored_papers[:50]]
 
             if not papers:
                 self.log.emit("No papers in database.")
@@ -304,7 +313,9 @@ Keywords:"""
                     raw = OllamaClient.generate(
                         self.model, prompt, timeout=180
                     )
+                    self.log.emit(f"Raw LLM response (first 300): {raw[:300]}")
                     suggestions = OllamaClient.extract_json(raw)
+                    self.log.emit(f"Parsed {len(suggestions)} suggestion(s) from batch {batch_idx + 1}")
                 except OllamaNotAvailableError as e:
                     self.error.emit(str(e))
                     return
@@ -575,7 +586,7 @@ class AISearchDialog(QDialog):
         self.worker.result.connect(self._on_result)
         self.worker.finished.connect(self._on_finished)
         self.worker.error.connect(self._on_error)
-        self.worker.log.connect(lambda msg: None)   # discard verbose logs
+        self.worker.log.connect(lambda msg: self.main_window.log(msg))
         self.worker.start()
 
     def _stop_suggest(self):
